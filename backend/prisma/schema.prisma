@@ -1,0 +1,54 @@
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+
+  rooms     Room[]   @relation("UserRooms")
+  sessions  Session[]
+}
+
+model Room {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime?
+
+  creator     User?    @relation("UserRooms", fields: [createdBy], references: [id])
+
+  users       Session[]
+  transfers   Transfer[]
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String?
+  roomId    String
+  socketId  String
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+  room Room  @relation(fields: [roomId], references: [id])
+}
+
+model Transfer {
+  id         String   @id @default(uuid())
+  roomId     String
+  fileName   String
+  fileSize   Int
+  status     String
+  createdAt  DateTime @default(now())
+
+  room Room @relation(fields: [roomId], references: [id])
+}

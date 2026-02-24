@@ -1,5 +1,7 @@
 import express from "express";
 import cors from "cors";
+import { prisma } from "./config/db.js";
+
 
 const app = express();
 
@@ -10,6 +12,11 @@ app.get("/health", (req, res) => {
   res.send("Server is running 🚀");
 });
 
+
+app.get("/test-db", async (req, res) => {
+  const rooms = await prisma.room.findMany();
+  res.json(rooms);
+});
 const PORT = 5001;
 
 app.listen(PORT, () => {

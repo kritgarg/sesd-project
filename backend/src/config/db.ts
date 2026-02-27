@@ -1,4 +1,12 @@
 import { PrismaClient } from "../generated/prisma/client.js";
+import { Pool } from "pg";
+import { PrismaPg } from "@prisma/adapter-pg";
+import * as dotenv from "dotenv";
 
-// @ts-ignore: Prisma 7 strictly expects an argument natively sometimes, bypassing constructor type error
-export const prisma = new PrismaClient();
+dotenv.config();
+
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+
+export const prisma = new PrismaClient({ adapter });

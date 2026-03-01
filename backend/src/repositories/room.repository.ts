@@ -1,9 +1,12 @@
 import { prisma } from "../config/db.js";
 
 export class RoomRepository {
-  async createRoom(code: string) {
+  async createRoom(code: string, expiresAt: Date) {
     return prisma.room.create({
-      data: { code },
+      data: {
+        code,
+        expiresAt,
+      },
     });
   }
 

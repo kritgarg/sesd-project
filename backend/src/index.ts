@@ -16,8 +16,16 @@ app.get("/health", (req, res) => {
 
 
 
+import http from "http";
+import { SocketServer } from "./websocket/socket.server.js";
+
 const PORT = 5001;
 
-app.listen(PORT, () => {
+const server = http.createServer(app);
+
+// attach websocket
+new SocketServer(server);
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });

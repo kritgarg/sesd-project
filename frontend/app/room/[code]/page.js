@@ -13,6 +13,7 @@ export default function RoomPage() {
   const [logs, setLogs] = useState([]);
   const [isChannelReady, setIsChannelReady] = useState(false);
   const receivedChunksRef = useRef([]);
+  const fileMetaRef = useRef(null);
 
   const CHUNK_SIZE = 16 * 1024;
 
@@ -34,23 +35,40 @@ export default function RoomPage() {
     };
 
     channel.onmessage = (event) => {
-      if (event.data === "EOF") {
-        addLog("File stream complete. Constructing file...");
-        const blob = new Blob(receivedChunksRef.current);
-        const url = URL.createObjectURL(blob);
+      // Handle metadata and EOF string messages
+      if (typeof event.data === "string") {
+        if (event.data === "EOF") {
+          addLog("File stream complete. Constructing file...");
+          const fileType = fileMetaRef.current?.fileType || "application/octet-stream";
+          const fileName = fileMetaRef.current?.fileName || `swiftshare_received_file`;
+          const blob = new Blob(receivedChunksRef.current, { type: fileType });
+          const url = URL.createObjectURL(blob);
 
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `swiftshare_received_file`;
-        a.click();
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = fileName;
+          a.click();
 
-        receivedChunksRef.current = [];
-        addLog("Download automatically initiated!");
-        URL.revokeObjectURL(url);
-        return;
+          receivedChunksRef.current = [];
+          fileMetaRef.current = null;
+          addLog(`Download automatically initiated: ${fileName}`);
+          URL.revokeObjectURL(url);
+          return;
+        }
+
+        // Try parsing metadata
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "metadata") {
+            fileMetaRef.current = data;
+            addLog(`Incoming metadata: ${data.fileName}`);
+            return;
+          }
+        } catch (err) {}
+      } else {
+        // Binary chunk
+        receivedChunksRef.current.push(event.data);
       }
-
-      receivedChunksRef.current.push(event.data);
     };
   };
 
@@ -171,6 +189,15 @@ export default function RoomPage() {
     }
 
     addLog(`Initiating transfer: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    
+    // SEND METADATA FIRST
+    channel.send(JSON.stringify({
+      type: "metadata",
+      fileName: file.name,
+      fileType: file.type,
+      fileSize: file.size
+    }));
+    
     let offset = 0;
 
     while (offset < file.size) {

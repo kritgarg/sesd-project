@@ -14,6 +14,10 @@ export default function RoomPage() {
   const [isChannelReady, setIsChannelReady] = useState(false);
   const receivedChunksRef = useRef([]);
   const fileMetaRef = useRef(null);
+  const receivedSizeRef = useRef(0);
+  const receiveStartTimeRef = useRef(0);
+  const [progress, setProgress] = useState(0);
+  const [speedMBps, setSpeedMBps] = useState(0);
 
   const CHUNK_SIZE = 16 * 1024;
 
@@ -51,6 +55,11 @@ export default function RoomPage() {
 
           receivedChunksRef.current = [];
           fileMetaRef.current = null;
+          receivedSizeRef.current = 0;
+          receiveStartTimeRef.current = 0;
+          setProgress(0);
+          setSpeedMBps(0);
+
           addLog(`Download automatically initiated: ${fileName}`);
           URL.revokeObjectURL(url);
           return;
@@ -67,7 +76,19 @@ export default function RoomPage() {
         } catch (err) {}
       } else {
         // Binary chunk
+        if (receiveStartTimeRef.current === 0) receiveStartTimeRef.current = Date.now();
         receivedChunksRef.current.push(event.data);
+        receivedSizeRef.current += event.data.byteLength;
+        
+        if (fileMetaRef.current?.fileSize) {
+          const p = (receivedSizeRef.current / fileMetaRef.current.fileSize) * 100;
+          setProgress(p);
+        }
+        
+        const elapsedSecs = (Date.now() - receiveStartTimeRef.current) / 1000;
+        if (elapsedSecs > 0) {
+           setSpeedMBps((receivedSizeRef.current / 1024 / 1024) / elapsedSecs);
+        }
       }
     };
   };
@@ -199,10 +220,19 @@ export default function RoomPage() {
     }));
     
     let offset = 0;
+    const MAX_BUFFER = 1_000_000; // 1MB
+    const sendStartTime = Date.now();
 
     while (offset < file.size) {
-      if (channel.bufferedAmount > channel.bufferedAmountLowThreshold) {
-        // Optional: Backpressure throttle could go here
+      if (channel.bufferedAmount > MAX_BUFFER) {
+        await new Promise((resolve) => {
+          const interval = setInterval(() => {
+            if (channel.bufferedAmount < MAX_BUFFER) {
+              clearInterval(interval);
+              resolve(true);
+            }
+          }, 50);
+        });
       }
       
       const chunk = file.slice(offset, offset + CHUNK_SIZE);
@@ -210,10 +240,20 @@ export default function RoomPage() {
 
       channel.send(buffer);
       offset += CHUNK_SIZE;
+      
+      setProgress((offset / file.size) * 100);
+      const elapsedSecs = (Date.now() - sendStartTime) / 1000;
+      if (elapsedSecs > 0) {
+        setSpeedMBps((offset / 1024 / 1024) / elapsedSecs);
+      }
     }
 
     channel.send("EOF");
     addLog("Transfer complete. Final EOF injected.");
+    setTimeout(() => {
+      setProgress(0);
+      setSpeedMBps(0);
+    }, 2000);
   };
 
   return (
@@ -244,23 +284,35 @@ export default function RoomPage() {
         </div>
 
         {/* File Transfer Actions */}
-        <div className="bg-neutral-900/40 backdrop-blur-3xl border border-white/10 p-6 rounded-3xl shadow-2xl flex items-center justify-center">
+        <div className="bg-neutral-900/40 backdrop-blur-3xl border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col items-center justify-center relative overflow-hidden">
+          
+          {progress > 0 && progress < 100 && (
+            <div className="absolute top-0 left-0 h-1 bg-indigo-500 transition-all duration-300 z-50" style={{ width: `${progress}%` }}></div>
+          )}
+
           <label className={`w-full flex items-center justify-center py-10 px-4 border-2 border-dashed ${isChannelReady ? 'border-indigo-500/50 hover:bg-indigo-500/10 cursor-pointer' : 'border-neutral-700 bg-neutral-950/50 opacity-50 cursor-not-allowed'} rounded-2xl transition-all duration-300 relative overflow-hidden group`}>
             
             <div className="text-center z-10 transition-transform duration-300 group-hover:scale-105">
               <span className={`block text-xl font-bold mb-2 ${isChannelReady ? 'text-indigo-400' : 'text-neutral-500'}`}>
-                {isChannelReady ? "🚀 Select File to Transmit" : "Awaiting RTC Data Channel..."}
+                {progress > 0 ? `${progress.toFixed(1)}%` : isChannelReady ? "🚀 Select File to Transmit" : "Awaiting RTC Data Channel..."}
               </span>
-              <span className="text-neutral-500 text-sm font-medium block">
-                Directly via raw WebRTC Buffer logic
-              </span>
+              
+              {progress > 0 ? (
+                <span className="text-indigo-300 text-sm font-medium block">
+                  Speed: {speedMBps.toFixed(2)} MB/s
+                </span>
+              ) : (
+                <span className="text-neutral-500 text-sm font-medium block">
+                  Directly via raw WebRTC Buffer logic
+                </span>
+              )}
             </div>
             
             <input 
               type="file" 
               className="hidden" 
               onChange={handleFile}
-              disabled={!isChannelReady}
+              disabled={!isChannelReady || progress > 0}
             />
           </label>
         </div>

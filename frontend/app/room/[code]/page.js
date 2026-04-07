@@ -3,6 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 
+async function generateHash(buffer) {
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 export default function RoomPage() {
   const { code } = useParams();
   const wsRef = useRef(null);
@@ -38,14 +44,42 @@ export default function RoomPage() {
       setIsChannelReady(false);
     };
 
-    channel.onmessage = (event) => {
+    channel.onmessage = async (event) => {
       // Handle metadata and EOF string messages
       if (typeof event.data === "string") {
         if (event.data === "EOF") {
-          addLog("File stream complete. Constructing file...");
+          addLog("File stream complete. Compiling chunks for integrity verification...");
+          
+          const totalLength = receivedChunksRef.current.reduce((acc, curr) => acc + curr.byteLength, 0);
+          const merged = new Uint8Array(totalLength);
+
+          let offset = 0;
+          for (const chunk of receivedChunksRef.current) {
+            merged.set(new Uint8Array(chunk), offset);
+            offset += chunk.byteLength;
+          }
+
+          const receivedHash = await generateHash(merged);
+
+          if (fileMetaRef.current?.hash && receivedHash !== fileMetaRef.current.hash) {
+            addLog("❌ INTEGRITY FAILURE: SHA-256 Hash Mismatch!");
+            alert("❌ File corrupted during transfer! Hash mismatch.");
+            
+            // cleanup
+            receivedChunksRef.current = [];
+            fileMetaRef.current = null;
+            receivedSizeRef.current = 0;
+            receiveStartTimeRef.current = 0;
+            setProgress(0);
+            setSpeedMBps(0);
+            return;
+          }
+
+          addLog(`✅ Integrity Verified: SHA-256 Match (${receivedHash.substring(0, 8)})`);
+
           const fileType = fileMetaRef.current?.fileType || "application/octet-stream";
           const fileName = fileMetaRef.current?.fileName || `swiftshare_received_file`;
-          const blob = new Blob(receivedChunksRef.current, { type: fileType });
+          const blob = new Blob([merged], { type: fileType });
           const url = URL.createObjectURL(blob);
 
           const a = document.createElement("a");
@@ -210,13 +244,19 @@ export default function RoomPage() {
     }
 
     addLog(`Initiating transfer: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    addLog(`Computing SHA-256 integrity hash...`);
+    
+    const fileBuffer = await file.arrayBuffer();
+    const hash = await generateHash(fileBuffer);
+    addLog(`Hash Generated: ${hash.substring(0, 8)}`);
     
     // SEND METADATA FIRST
     channel.send(JSON.stringify({
       type: "metadata",
       fileName: file.name,
       fileType: file.type,
-      fileSize: file.size
+      fileSize: file.size,
+      hash
     }));
     
     let offset = 0;

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import { QRCodeCanvas } from "qrcode.react";
 
 async function generateHash(buffer) {
   const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
@@ -24,8 +25,15 @@ export default function RoomPage() {
   const receiveStartTimeRef = useRef(0);
   const [progress, setProgress] = useState(0);
   const [speedMBps, setSpeedMBps] = useState(0);
+  const [roomUrl, setRoomUrl] = useState("");
 
   const CHUNK_SIZE = 16 * 1024;
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setRoomUrl(`${window.location.origin}/room/${code}`);
+    }
+  }, [code]);
 
   const addLog = (msg) => {
     setLogs((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
@@ -304,23 +312,40 @@ export default function RoomPage() {
 
       <div className="z-10 w-full max-w-4xl flex flex-col gap-6 mt-10">
         
-        {/* Status Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl">
-          <div>
-            <h1 className="text-3xl font-black mb-2 text-white">
-              Room Code: <span className="font-mono bg-neutral-950/50 border border-white/10 text-indigo-400 px-4 py-1.5 rounded-xl tracking-widest select-all shadow-inner uppercase ml-2">{code}</span>
-            </h1>
-            <p className="text-neutral-400 font-medium flex items-center gap-3">
-              <span className={`w-3 h-3 rounded-full ${status.includes('P2P pipeline is active') ? 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]' : 'bg-amber-400 animate-pulse shadow-[0_0_12px_rgba(251,191,36,0.6)]'}`}></span>
-              {status}
+        {/* Status Header & QR Generator */}
+        <div className="flex flex-col md:flex-row items-center justify-between bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl gap-8">
+          <div className="flex-1">
+             <div className="flex items-center gap-4 mb-5">
+               <h1 className="text-4xl font-black text-white bg-gradient-to-tr from-white via-indigo-200 to-indigo-500 bg-clip-text text-transparent">
+                 SwiftShare
+               </h1>
+               <div className="h-6 w-[2px] bg-white/10 hidden md:block"></div>
+               <span className="font-mono bg-neutral-950/50 border border-white/10 text-indigo-400 px-5 py-2 rounded-xl tracking-widest select-all shadow-inner uppercase text-xl hidden md:block">
+                 {code}
+               </span>
+             </div>
+            
+            <p className="text-neutral-300 font-medium flex items-center gap-3 text-lg">
+              <span className={`w-3.5 h-3.5 rounded-full ${status.includes('P2P pipeline is active') ? 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]' : 'bg-amber-400 animate-pulse shadow-[0_0_12px_rgba(251,191,36,0.6)]'}`}></span>
+              Status: <span className="font-bold">{status.includes('P2P pipeline is active') ? "Connected ✅" : status}</span>
             </p>
           </div>
-          <button 
-            onClick={() => navigator.clipboard.writeText(code)} 
-            className="hidden md:block px-6 py-4 bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl transition-all font-bold text-sm hover:shadow-[0_0_20px_rgba(255,255,255,0.05)] active:scale-95 text-white"
-          >
-            Copy Code
-          </button>
+          
+          <div className="flex flex-col items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10 shadow-lg">
+            {roomUrl ? (
+               <div className="bg-white p-2 rounded-xl">
+                 <QRCodeCanvas value={roomUrl} size={110} bgColor={"#ffffff"} fgColor={"#000000"} />
+               </div>
+            ) : (
+               <div className="w-[126px] h-[126px] bg-white/10 rounded-xl animate-pulse" />
+            )}
+            <button 
+              onClick={() => navigator.clipboard.writeText(roomUrl || code)} 
+              className="w-full px-4 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-500/30 rounded-xl transition-all font-bold text-xs hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] active:scale-95 text-indigo-300 uppercase tracking-wider"
+            >
+              Copy Link
+            </button>
+          </div>
         </div>
 
         {/* File Transfer Actions */}

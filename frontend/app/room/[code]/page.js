@@ -3,12 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
-
-async function generateHash(buffer) {
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
-}
+import { generateHash } from "../../../utils/hash";
+import { useFileTransfer } from "../../../hooks/useFileTransfer";
+import FileQueueUI from "../../../components/Room/FileQueueUI";
 
 export default function RoomPage() {
   const { code } = useParams();
@@ -38,6 +35,11 @@ export default function RoomPage() {
   const addLog = (msg) => {
     setLogs((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
   };
+
+  const { addFiles, sendProgress, sendSpeedMBps, currentFile, queueRaw } = useFileTransfer(dataChannelRef, addLog);
+
+  const activeProgress = sendProgress > 0 ? sendProgress : progress;
+  const activeSpeedMBps = sendSpeedMBps > 0 ? sendSpeedMBps : speedMBps;
 
   const setupDataChannel = (channel) => {
     channel.binaryType = "arraybuffer";
@@ -241,68 +243,7 @@ export default function RoomPage() {
     };
   }, [code]);
 
-  const handleFile = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const channel = dataChannelRef.current;
-    if (!channel || channel.readyState !== "open") {
-      alert("No connection yet");
-      return;
-    }
-
-    addLog(`Initiating transfer: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
-    addLog(`Computing SHA-256 integrity hash...`);
-    
-    const fileBuffer = await file.arrayBuffer();
-    const hash = await generateHash(fileBuffer);
-    addLog(`Hash Generated: ${hash.substring(0, 8)}`);
-    
-    // SEND METADATA FIRST
-    channel.send(JSON.stringify({
-      type: "metadata",
-      fileName: file.name,
-      fileType: file.type,
-      fileSize: file.size,
-      hash
-    }));
-    
-    let offset = 0;
-    const MAX_BUFFER = 1_000_000; // 1MB
-    const sendStartTime = Date.now();
-
-    while (offset < file.size) {
-      if (channel.bufferedAmount > MAX_BUFFER) {
-        await new Promise((resolve) => {
-          const interval = setInterval(() => {
-            if (channel.bufferedAmount < MAX_BUFFER) {
-              clearInterval(interval);
-              resolve(true);
-            }
-          }, 50);
-        });
-      }
-      
-      const chunk = file.slice(offset, offset + CHUNK_SIZE);
-      const buffer = await chunk.arrayBuffer();
-
-      channel.send(buffer);
-      offset += CHUNK_SIZE;
-      
-      setProgress((offset / file.size) * 100);
-      const elapsedSecs = (Date.now() - sendStartTime) / 1000;
-      if (elapsedSecs > 0) {
-        setSpeedMBps((offset / 1024 / 1024) / elapsedSecs);
-      }
-    }
-
-    channel.send("EOF");
-    addLog("Transfer complete. Final EOF injected.");
-    setTimeout(() => {
-      setProgress(0);
-      setSpeedMBps(0);
-    }, 2000);
-  };
+  // Send logic migrated to custom hook `useFileTransfer`
 
   return (
     <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center p-8 font-sans relative overflow-hidden">
@@ -351,35 +292,38 @@ export default function RoomPage() {
         {/* File Transfer Actions */}
         <div className="bg-neutral-900/40 backdrop-blur-3xl border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col items-center justify-center relative overflow-hidden">
           
-          {progress > 0 && progress < 100 && (
-            <div className="absolute top-0 left-0 h-1 bg-indigo-500 transition-all duration-300 z-50" style={{ width: `${progress}%` }}></div>
+          {activeProgress > 0 && activeProgress < 100 && (
+            <div className="absolute top-0 left-0 h-1 bg-indigo-500 transition-all duration-300 z-50" style={{ width: `${activeProgress}%` }}></div>
           )}
 
           <label className={`w-full flex items-center justify-center py-10 px-4 border-2 border-dashed ${isChannelReady ? 'border-indigo-500/50 hover:bg-indigo-500/10 cursor-pointer' : 'border-neutral-700 bg-neutral-950/50 opacity-50 cursor-not-allowed'} rounded-2xl transition-all duration-300 relative overflow-hidden group`}>
             
             <div className="text-center z-10 transition-transform duration-300 group-hover:scale-105">
               <span className={`block text-xl font-bold mb-2 ${isChannelReady ? 'text-indigo-400' : 'text-neutral-500'}`}>
-                {progress > 0 ? `${progress.toFixed(1)}%` : isChannelReady ? "🚀 Select File to Transmit" : "Awaiting RTC Data Channel..."}
+                {activeProgress > 0 ? `${activeProgress.toFixed(1)}%` : isChannelReady ? "🚀 Select Files to Transmit" : "Awaiting RTC Data Channel..."}
               </span>
               
-              {progress > 0 ? (
+              {activeProgress > 0 ? (
                 <span className="text-indigo-300 text-sm font-medium block">
-                  Speed: {speedMBps.toFixed(2)} MB/s
+                  Speed: {activeSpeedMBps.toFixed(2)} MB/s
                 </span>
               ) : (
                 <span className="text-neutral-500 text-sm font-medium block">
-                  Directly via raw WebRTC Buffer logic
+                  Directly via raw WebRTC Buffer logic (Multiple files enabled)
                 </span>
               )}
             </div>
             
             <input 
               type="file" 
+              multiple
               className="hidden" 
-              onChange={handleFile}
-              disabled={!isChannelReady || progress > 0}
+              onChange={(e) => addFiles(e.target.files)}
+              disabled={!isChannelReady || activeProgress > 0}
             />
           </label>
+          
+          <FileQueueUI currentFile={currentFile} queueRaw={queueRaw} />
         </div>
 
         {/* Console / Logs Window */}

@@ -6,6 +6,7 @@ import { QRCodeCanvas } from "qrcode.react";
 import { generateHash } from "../../../utils/hash";
 import { useFileTransfer } from "../../../hooks/useFileTransfer";
 import FileQueueUI from "../../../components/Room/FileQueueUI";
+import TransferRequest from "../../../components/Room/TransferRequest";
 
 export default function RoomPage() {
   const { code } = useParams();
@@ -23,6 +24,7 @@ export default function RoomPage() {
   const [progress, setProgress] = useState(0);
   const [speedMBps, setSpeedMBps] = useState(0);
   const [roomUrl, setRoomUrl] = useState("");
+  const [incomingRequest, setIncomingRequest] = useState(null);
 
   const CHUNK_SIZE = 16 * 1024;
 
@@ -36,10 +38,24 @@ export default function RoomPage() {
     setLogs((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
   };
 
-  const { addFiles, sendProgress, sendSpeedMBps, currentFile, queueRaw } = useFileTransfer(dataChannelRef, addLog);
+  const { addFiles, sendProgress, sendSpeedMBps, currentFile, queueRaw, handleTransferResponse } = useFileTransfer(dataChannelRef, addLog);
 
   const activeProgress = sendProgress > 0 ? sendProgress : progress;
   const activeSpeedMBps = sendSpeedMBps > 0 ? sendSpeedMBps : speedMBps;
+
+  const handleAccept = () => {
+    const channel = dataChannelRef.current;
+    if (channel) channel.send(JSON.stringify({ type: "transfer-accept" }));
+    addLog(`✅ Accepted incoming file transfer.`);
+    setIncomingRequest(null);
+  };
+
+  const handleReject = () => {
+    const channel = dataChannelRef.current;
+    if (channel) channel.send(JSON.stringify({ type: "transfer-reject" }));
+    addLog(`❌ Rejected incoming file transfer.`);
+    setIncomingRequest(null);
+  };
 
   const setupDataChannel = (channel) => {
     channel.binaryType = "arraybuffer";
@@ -112,6 +128,18 @@ export default function RoomPage() {
         // Try parsing metadata
         try {
           const data = JSON.parse(event.data);
+          
+          if (data.type === "transfer-request") {
+             addLog(`Incoming transfer request: ${data.fileName}`);
+             setIncomingRequest(data);
+             return;
+          }
+          
+          if (data.type === "transfer-accept" || data.type === "transfer-reject") {
+             handleTransferResponse(data.type);
+             return;
+          }
+
           if (data.type === "metadata") {
             fileMetaRef.current = data;
             addLog(`Incoming metadata: ${data.fileName}`);
@@ -190,7 +218,11 @@ export default function RoomPage() {
 
     ws.onmessage = async (msg) => {
       const data = JSON.parse(msg.data);
-      addLog(`Signaling Event: ${data.type.toUpperCase()}`);
+      if (data.error) {
+        addLog(`Signaling Error: ${data.error}`);
+        return;
+      }
+      addLog(`Signaling Event: ${data.type?.toUpperCase() || 'UNKNOWN'}`);
 
       if (data.type === "peer-joined") {
         setStatus("Peer joined. Initiating offer handshake...");
@@ -351,6 +383,12 @@ export default function RoomPage() {
         </div>
 
       </div>
+      
+      <TransferRequest 
+        request={incomingRequest} 
+        onAccept={handleAccept} 
+        onReject={handleReject} 
+      />
     </div>
   );
 }

@@ -7,6 +7,13 @@ export function useFileTransfer(dataChannelRef, addLog) {
   const [currentFile, setCurrentFile] = useState(null);
   const [sendProgress, setSendProgress] = useState(0);
   const [sendSpeedMBps, setSendSpeedMBps] = useState(0);
+  const resolveApprovalRef = useRef(null);
+
+  const handleTransferResponse = (type) => {
+    if (resolveApprovalRef.current) {
+      resolveApprovalRef.current(type);
+    }
+  };
 
   const processQueue = async () => {
     if (queueRef.current.isProcessing) return;
@@ -34,6 +41,28 @@ export function useFileTransfer(dataChannelRef, addLog) {
     const MAX_BUFFER = 1_000_000;
 
     addLog?.(`Initiating transfer: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`);
+    
+    channel.send(JSON.stringify({
+      type: "transfer-request",
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    }));
+
+    addLog?.(`Awaiting peer approval for ${file.name}...`);
+    
+    const responseType = await new Promise(resolve => {
+       resolveApprovalRef.current = resolve;
+    });
+    
+    resolveApprovalRef.current = null;
+    
+    if (responseType === "transfer-reject") {
+       addLog?.(`❌ Transfer rejected by peer: ${file.name}`);
+       return;
+    }
+
+    addLog?.(`✅ Transfer accepted! Initiating...`);
     addLog?.(`Computing SHA-256 integrity hash...`);
     
     const fileBuffer = await file.arrayBuffer();
@@ -97,6 +126,7 @@ export function useFileTransfer(dataChannelRef, addLog) {
     sendProgress,
     sendSpeedMBps,
     currentFile,
-    queueRaw: queueRef.current.queue
+    queueRaw: queueRef.current.queue,
+    handleTransferResponse
   };
 }

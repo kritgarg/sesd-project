@@ -278,109 +278,73 @@ export default function RoomPage() {
   // Send logic migrated to custom hook `useFileTransfer`
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white flex flex-col items-center p-8 font-sans relative overflow-hidden">
-      {/* Background glow effects */}
-      <div className="absolute top-[-100px] right-[-100px] w-[500px] h-[500px] bg-indigo-500/10 blur-[120px] rounded-full pointer-events-none" />
-      <div className="absolute bottom-[-100px] left-[-100px] w-[500px] h-[500px] bg-blue-500/10 blur-[120px] rounded-full pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center bg-[#f7f7f7] relative px-6">
+      <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
 
-      <div className="z-10 w-full max-w-4xl flex flex-col gap-6 mt-10">
+      <div className="z-10 w-full flex flex-col items-center">
         
-        {/* Status Header & QR Generator */}
-        <div className="flex flex-col md:flex-row items-center justify-between bg-neutral-900/60 backdrop-blur-2xl border border-white/10 p-8 rounded-3xl shadow-2xl gap-8">
-          <div className="flex-1">
-             <div className="flex items-center gap-4 mb-5">
-               <h1 className="text-4xl font-black text-white bg-gradient-to-tr from-white via-indigo-200 to-indigo-500 bg-clip-text text-transparent">
-                 SwiftShare
-               </h1>
-               <div className="h-6 w-[2px] bg-white/10 hidden md:block"></div>
-               <span className="font-mono bg-neutral-950/50 border border-white/10 text-indigo-400 px-5 py-2 rounded-xl tracking-widest select-all shadow-inner uppercase text-xl hidden md:block">
-                 {code}
-               </span>
-             </div>
-            
-            <p className="text-neutral-300 font-medium flex items-center gap-3 text-lg">
-              <span className={`w-3.5 h-3.5 rounded-full ${status.includes('P2P pipeline is active') ? 'bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.6)]' : 'bg-amber-400 animate-pulse shadow-[0_0_12px_rgba(251,191,36,0.6)]'}`}></span>
-              Status: <span className="font-bold">{status.includes('P2P pipeline is active') ? "Connected ✅" : status}</span>
-            </p>
+        {/* Drop Zone (If no files queued) */}
+        {(!queueRaw || queueRaw.length === 0) && !currentFile && !incomingRequest && (
+          <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-10 shadow-sm hover:shadow-md transition-all duration-300 w-[360px] text-center">
+             <h2 className="text-xl font-semibold mb-2 text-[#0a0a0a]">You're connected!</h2>
+             <p className="text-sm text-[#6b6b6b] mb-8">
+                Room Code: <span className="font-mono text-[#0a0a0a] bg-gray-100 px-2 py-1 rounded">{code}</span>
+             </p>
+             <p className="text-sm text-[#6b6b6b] mb-4">Drop files here to share</p>
+             <input type="file" multiple className="hidden" id="fileInput" onChange={(e) => addFiles(e.target.files)} />
+             <label
+               htmlFor="fileInput"
+               className="cursor-pointer text-sm font-medium px-6 py-3 bg-[#111111] text-white rounded-full hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 inline-block"
+             >
+               Select Files
+             </label>
+             <p className="text-xs text-[#6b6b6b] mt-6 flex justify-center items-center gap-2">
+               <span className={`w-2 h-2 rounded-full inline-block ${status.includes('P2P pipeline is active') ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></span>
+               {status.includes('P2P pipeline is active') ? 'Peer Connected' : 'Waiting for receiver...'}
+             </p>
           </div>
-          
-          <div className="flex flex-col items-center gap-3 bg-white/5 p-4 rounded-2xl border border-white/10 shadow-lg">
-            {roomUrl ? (
-               <div className="bg-white p-2 rounded-xl">
-                 <QRCodeCanvas value={roomUrl} size={110} bgColor={"#ffffff"} fgColor={"#000000"} />
-               </div>
-            ) : (
-               <div className="w-[126px] h-[126px] bg-white/10 rounded-xl animate-pulse" />
-            )}
+        )}
+
+        {/* Sender Status Sheet (If files are actively queued) */}
+        {((queueRaw && queueRaw.length > 0) || currentFile) && !incomingRequest && (
+          <div className="bg-white rounded-2xl p-8 shadow-sm w-[360px] text-center border border-[rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
+            <h2 className="text-lg font-medium mb-2 text-[#0a0a0a]">Your link is ready</h2>
+            <p className="text-xs text-[#6b6b6b] mb-6">Keep this page open while sharing</p>
+
+            <div className="flex justify-center mb-6">
+               <QRCodeCanvas value={roomUrl || code} size={140} bgColor={"#ffffff"} fgColor={"#111111"} />
+            </div>
+
+            <div className="bg-gray-100 p-3 rounded-lg text-xs mb-4 text-[#6b6b6b] font-mono break-all border border-[rgba(0,0,0,0.06)]">
+              {roomUrl || code}
+            </div>
+
             <button 
-              onClick={() => navigator.clipboard.writeText(roomUrl || code)} 
-              className="w-full px-4 py-2.5 bg-indigo-500/20 hover:bg-indigo-500/40 border border-indigo-500/30 rounded-xl transition-all font-bold text-xs hover:shadow-[0_0_20px_rgba(99,102,241,0.2)] active:scale-95 text-indigo-300 uppercase tracking-wider"
+              onClick={() => navigator.clipboard.writeText(roomUrl || code)}
+              className="bg-[#111111] text-white px-6 py-2.5 rounded-full text-sm font-medium hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 w-full mb-4"
             >
               Copy Link
             </button>
-          </div>
-        </div>
 
-        {/* File Transfer Actions */}
-        <div className="bg-neutral-900/40 backdrop-blur-3xl border border-white/10 p-6 rounded-3xl shadow-2xl flex flex-col items-center justify-center relative overflow-hidden">
-          
-          {activeProgress > 0 && activeProgress < 100 && (
-            <div className="absolute top-0 left-0 h-1 bg-indigo-500 transition-all duration-300 z-50" style={{ width: `${activeProgress}%` }}></div>
-          )}
-
-          <label className={`w-full flex items-center justify-center py-10 px-4 border-2 border-dashed ${isChannelReady ? 'border-indigo-500/50 hover:bg-indigo-500/10 cursor-pointer' : 'border-neutral-700 bg-neutral-950/50 opacity-50 cursor-not-allowed'} rounded-2xl transition-all duration-300 relative overflow-hidden group`}>
+            {activeProgress > 0 && activeProgress < 100 && (
+              <div className="w-full bg-gray-100 rounded-full h-2 mb-2 overflow-hidden border border-[rgba(0,0,0,0.06)]">
+                <div
+                  className="bg-[#111111] h-full rounded-full transition-all duration-300"
+                  style={{ width: `${activeProgress}%` }}
+                ></div>
+              </div>
+            )}
             
-            <div className="text-center z-10 transition-transform duration-300 group-hover:scale-105">
-              <span className={`block text-xl font-bold mb-2 ${isChannelReady ? 'text-indigo-400' : 'text-neutral-500'}`}>
-                {activeProgress > 0 ? `${activeProgress.toFixed(1)}%` : isChannelReady ? "🚀 Select Files to Transmit" : "Awaiting RTC Data Channel..."}
-              </span>
-              
-              {activeProgress > 0 ? (
-                <span className="text-indigo-300 text-sm font-medium block">
-                  Speed: {activeSpeedMBps.toFixed(2)} MB/s
-                </span>
-              ) : (
-                <span className="text-neutral-500 text-sm font-medium block">
-                  Directly via raw WebRTC Buffer logic (Multiple files enabled)
-                </span>
-              )}
-            </div>
-            
-            <input 
-              type="file" 
-              multiple
-              className="hidden" 
-              onChange={(e) => addFiles(e.target.files)}
-              disabled={!isChannelReady || activeProgress > 0}
-            />
-          </label>
-          
-          <FileQueueUI currentFile={currentFile} queueRaw={queueRaw} />
-        </div>
+            <p className="text-xs text-[#6b6b6b] my-2 truncate">
+              {currentFile ? `Sending: ${currentFile.name} (${activeProgress.toFixed(1)}%) - ${activeSpeedMBps.toFixed(2)} MB/s` : ""}
+            </p>
 
-        {/* Console / Logs Window */}
-        <div className="bg-[#0A0A0A] border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex-1 max-h-[40vh] flex flex-col relative">
-          <div className="border-b border-white/5 bg-neutral-900/80 px-6 py-4 flex items-center justify-between">
-            <div className="flex gap-2">
-              <div className="w-3.5 h-3.5 rounded-full bg-red-500"></div>
-              <div className="w-3.5 h-3.5 rounded-full bg-amber-500"></div>
-              <div className="w-3.5 h-3.5 rounded-full bg-emerald-500"></div>
-            </div>
-            <span className="text-xs font-mono text-neutral-500 uppercase tracking-widest font-bold">Signaling Diagnostics</span>
+            <p className="text-xs text-[#6b6b6b] mt-4 flex justify-center items-center gap-2 pt-4 border-t border-[rgba(0,0,0,0.06)]">
+              <span className={`w-2 h-2 rounded-full inline-block ${status.includes('P2P pipeline is active') ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></span>
+              {status.includes('P2P pipeline is active') ? "Transferring..." : "Waiting for receiver..."}
+            </p>
           </div>
-          
-          <div className="flex-1 overflow-y-auto p-6 font-mono text-sm space-y-3">
-             {logs.map((log, i) => (
-                <div key={i} className="flex gap-4 group">
-                  <span className="text-neutral-700 select-none group-hover:text-indigo-400/50 transition-colors w-8 text-right block">[{i + 1}]</span>
-                  <span className={`${log.includes('active') ? 'text-emerald-400 font-bold' : log.includes('open') || log.includes('download') || log.includes('Download') ? 'text-green-400 font-bold' : log.includes('Event:') ? 'text-indigo-300 font-medium' : log.includes('WebSocket') ? 'text-blue-400' : 'text-neutral-400'}`}>
-                    {log}
-                  </span>
-                </div>
-             ))}
-             {logs.length === 0 && <div className="text-neutral-600 flex items-center justify-center h-full italic">Waiting for events to populate...</div>}
-          </div>
-        </div>
+        )}
 
       </div>
       

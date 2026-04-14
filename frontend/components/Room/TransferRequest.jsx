@@ -2,35 +2,28 @@ export default function TransferRequest({ request, onAccept, onReject }) {
   if (!request) return null;
 
   return (
-    <div className="fixed inset-0 bg-neutral-950/80 backdrop-blur-sm flex items-center justify-center z-[100] px-4">
-      <div className="bg-neutral-900 border border-white/10 p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500"></div>
-        <div className="w-16 h-16 bg-indigo-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-indigo-500/30">
-           <span className="text-2xl animate-bounce mt-1">📥</span>
-        </div>
-        
-        <h2 className="text-2xl font-black mb-2 text-white">Incoming File</h2>
-        <p className="text-neutral-400 mb-6 font-medium text-sm">
-          Your peer is requesting to send a file.
+    <div className="fixed inset-0 bg-[#f7f7f7] flex items-center justify-center z-[100] px-4">
+      <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
+      
+      <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-8 shadow-sm w-[340px] text-center z-10 transition-all duration-300 hover:shadow-md">
+        <p className="text-sm text-[#6b6b6b] mb-2">Incoming file</p>
+        <h2 className="text-lg font-medium text-[#0a0a0a] mb-1 truncate">{request.fileName}</h2>
+        <p className="text-xs text-[#6b6b6b] mb-6">
+          {(request.fileSize / 1024 / 1024).toFixed(2)} MB
         </p>
 
-        <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-8">
-          <p className="font-semibold text-indigo-300 truncate mb-1">{request.fileName}</p>
-          <p className="text-xs text-neutral-500 font-mono">{(request.fileSize / 1024 / 1024).toFixed(2)} MB • {request.fileType || 'Unknown Type'}</p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4">
-          <button 
-            onClick={onReject}
-            className="flex-1 px-4 py-3 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl font-bold text-red-400 transition-all active:scale-95"
-          >
-            Reject
-          </button>
+        <div className="flex flex-col gap-3">
           <button 
             onClick={onAccept}
-            className="flex-1 px-4 py-3 bg-emerald-500 hover:bg-emerald-400 text-neutral-950 rounded-xl font-bold shadow-[0_0_20px_rgba(52,211,153,0.3)] transition-all active:scale-95"
+            className="w-full bg-[#111111] text-white px-5 py-2.5 rounded-full text-sm font-medium hover:scale-[1.02] active:scale-[0.97] transition-all duration-200"
           >
-            Accept
+            Download
+          </button>
+          <button 
+            onClick={onReject}
+            className="w-full bg-white text-[#6b6b6b] border border-[rgba(0,0,0,0.06)] px-5 py-2.5 rounded-full text-sm font-medium hover:bg-[#f7f7f7] transition-all duration-200"
+          >
+            Decline
           </button>
         </div>
       </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import { QRCodeCanvas } from "qrcode.react";
 import { generateHash } from "../../../utils/hash";
@@ -13,158 +13,196 @@ export default function RoomPage() {
   const wsRef = useRef(null);
   const pcRef = useRef(null);
   const dataChannelRef = useRef(null);
-  
-  const [status, setStatus] = useState("Connecting to signaling server...");
+
+  const [status, setStatus] = useState("Connecting...");
   const [logs, setLogs] = useState([]);
   const [isChannelReady, setIsChannelReady] = useState(false);
+  const [roomUrl, setRoomUrl] = useState("");
+  const [incomingManifest, setIncomingManifest] = useState(null);
+  const [role, setRole] = useState(null); // "sender" | "receiver"
+
+  // Receiver state
   const receivedChunksRef = useRef([]);
   const fileMetaRef = useRef(null);
   const receivedSizeRef = useRef(0);
   const receiveStartTimeRef = useRef(0);
-  const [progress, setProgress] = useState(0);
-  const [speedMBps, setSpeedMBps] = useState(0);
-  const [roomUrl, setRoomUrl] = useState("");
-  const [incomingRequest, setIncomingRequest] = useState(null);
+  const [recvProgress, setRecvProgress] = useState(0);
+  const [recvSpeed, setRecvSpeed] = useState(0);
+  const [recvFileName, setRecvFileName] = useState("");
 
-  const CHUNK_SIZE = 16 * 1024;
+  // Stable log function using ref to avoid dependency issues
+  const logsRef = useRef([]);
+  const addLog = useCallback((msg) => {
+    const entry = `${new Date().toLocaleTimeString()} — ${msg}`;
+    logsRef.current = [...logsRef.current, entry];
+    setLogs([...logsRef.current]);
+  }, []);
 
+  const {
+    stagedFiles,
+    stageFiles,
+    sendManifest,
+    handleManifestResponse,
+    waitForApprovalAndSend,
+    currentFile,
+    transferPhase,
+    totalStagedSize,
+    formatSize,
+  } = useFileTransfer(dataChannelRef, addLog);
+
+  // Keep refs for values the channel handler needs (avoids stale closures)
+  const roleRef = useRef(role);
+  const sendManifestRef = useRef(sendManifest);
+  const waitForApprovalRef = useRef(waitForApprovalAndSend);
+  const handleManifestResponseRef = useRef(handleManifestResponse);
+  const stagedFilesRef = useRef(stagedFiles);
+
+  useEffect(() => { roleRef.current = role; }, [role]);
+  useEffect(() => { sendManifestRef.current = sendManifest; }, [sendManifest]);
+  useEffect(() => { waitForApprovalRef.current = waitForApprovalAndSend; }, [waitForApprovalAndSend]);
+  useEffect(() => { handleManifestResponseRef.current = handleManifestResponse; }, [handleManifestResponse]);
+  useEffect(() => { stagedFilesRef.current = stagedFiles; }, [stagedFiles]);
+
+  // Build room URL
   useEffect(() => {
     if (typeof window !== "undefined") {
       setRoomUrl(`${window.location.origin}/room/${code}`);
     }
   }, [code]);
 
-  const addLog = (msg) => {
-    setLogs((prev) => [...prev, `${new Date().toLocaleTimeString()} - ${msg}`]);
-  };
+  // Pick up files from the landing page
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.__swiftshare_files) {
+      const files = window.__swiftshare_files;
+      stageFiles(files);
+      setRole("sender");
+      window.__swiftshare_files = null;
+    }
+  }, [stageFiles]);
 
-  const { addFiles, sendProgress, sendSpeedMBps, currentFile, queueRaw, handleTransferResponse } = useFileTransfer(dataChannelRef, addLog);
-
-  const activeProgress = sendProgress > 0 ? sendProgress : progress;
-  const activeSpeedMBps = sendSpeedMBps > 0 ? sendSpeedMBps : speedMBps;
-
-  const handleAccept = () => {
-    const channel = dataChannelRef.current;
-    if (channel) channel.send(JSON.stringify({ type: "transfer-accept" }));
-    addLog(`✅ Accepted incoming file transfer.`);
-    setIncomingRequest(null);
-  };
-
-  const handleReject = () => {
-    const channel = dataChannelRef.current;
-    if (channel) channel.send(JSON.stringify({ type: "transfer-reject" }));
-    addLog(`❌ Rejected incoming file transfer.`);
-    setIncomingRequest(null);
-  };
-
-  const setupDataChannel = (channel) => {
+  // ── DataChannel setup (uses REFS only — no reactive deps) ────
+  const setupDataChannel = useCallback((channel) => {
     channel.binaryType = "arraybuffer";
 
     channel.onopen = () => {
-      addLog("DataChannel open 🚀 Ready for file transfer");
+      addLog("DataChannel open — ready for transfers");
       setIsChannelReady(true);
+
+      // If sender has staged files, send manifest after a short delay
+      if (roleRef.current === "sender" || stagedFilesRef.current.length > 0) {
+        setTimeout(() => {
+          sendManifestRef.current();
+          waitForApprovalRef.current();
+        }, 300);
+      }
     };
-    
+
     channel.onclose = () => {
       addLog("DataChannel closed");
       setIsChannelReady(false);
     };
 
     channel.onmessage = async (event) => {
-      // Handle metadata and EOF string messages
       if (typeof event.data === "string") {
+        // EOF → assemble and verify file
         if (event.data === "EOF") {
-          addLog("File stream complete. Compiling chunks for integrity verification...");
-          
-          const totalLength = receivedChunksRef.current.reduce((acc, curr) => acc + curr.byteLength, 0);
-          const merged = new Uint8Array(totalLength);
+          addLog("EOF received — verifying integrity...");
 
-          let offset = 0;
+          const totalLength = receivedChunksRef.current.reduce(
+            (acc, curr) => acc + curr.byteLength, 0
+          );
+          const merged = new Uint8Array(totalLength);
+          let off = 0;
           for (const chunk of receivedChunksRef.current) {
-            merged.set(new Uint8Array(chunk), offset);
-            offset += chunk.byteLength;
+            merged.set(new Uint8Array(chunk), off);
+            off += chunk.byteLength;
           }
 
           const receivedHash = await generateHash(merged);
 
           if (fileMetaRef.current?.hash && receivedHash !== fileMetaRef.current.hash) {
-            addLog("❌ INTEGRITY FAILURE: SHA-256 Hash Mismatch!");
-            alert("❌ File corrupted during transfer! Hash mismatch.");
-            
-            // cleanup
+            addLog("❌ SHA-256 mismatch — file corrupted");
             receivedChunksRef.current = [];
             fileMetaRef.current = null;
             receivedSizeRef.current = 0;
             receiveStartTimeRef.current = 0;
-            setProgress(0);
-            setSpeedMBps(0);
+            setRecvProgress(0);
+            setRecvSpeed(0);
             return;
           }
 
-          addLog(`✅ Integrity Verified: SHA-256 Match (${receivedHash.substring(0, 8)})`);
+          addLog(`✅ Integrity verified (${receivedHash.substring(0, 12)})`);
 
-          const fileType = fileMetaRef.current?.fileType || "application/octet-stream";
-          const fileName = fileMetaRef.current?.fileName || `swiftshare_received_file`;
-          const blob = new Blob([merged], { type: fileType });
+          const blob = new Blob([merged], {
+            type: fileMetaRef.current?.fileType || "application/octet-stream",
+          });
           const url = URL.createObjectURL(blob);
-
           const a = document.createElement("a");
           a.href = url;
-          a.download = fileName;
+          a.download = fileMetaRef.current?.fileName || "swiftshare_file";
           a.click();
+          URL.revokeObjectURL(url);
 
+          addLog(`Downloaded: ${fileMetaRef.current?.fileName || "file"}`);
+
+          // Reset for next file
           receivedChunksRef.current = [];
           fileMetaRef.current = null;
           receivedSizeRef.current = 0;
           receiveStartTimeRef.current = 0;
-          setProgress(0);
-          setSpeedMBps(0);
-
-          addLog(`Download automatically initiated: ${fileName}`);
-          URL.revokeObjectURL(url);
+          setRecvProgress(0);
+          setRecvSpeed(0);
+          setRecvFileName("");
           return;
         }
 
-        // Try parsing metadata
+        // JSON messages
         try {
           const data = JSON.parse(event.data);
-          
-          if (data.type === "transfer-request") {
-             addLog(`Incoming transfer request: ${data.fileName}`);
-             setIncomingRequest(data);
-             return;
+
+          if (data.type === "file-list") {
+            addLog(`Manifest received: ${data.files.length} file(s)`);
+            setRole("receiver");
+            setIncomingManifest(data);
+            return;
           }
-          
-          if (data.type === "transfer-accept" || data.type === "transfer-reject") {
-             handleTransferResponse(data.type);
-             return;
+
+          if (data.type === "manifest-accept" || data.type === "manifest-reject") {
+            handleManifestResponseRef.current(data);
+            return;
           }
 
           if (data.type === "metadata") {
             fileMetaRef.current = data;
-            addLog(`Incoming metadata: ${data.fileName}`);
+            setRecvFileName(data.fileName);
+            addLog(`Receiving: ${data.fileName}`);
             return;
           }
         } catch (err) {}
       } else {
         // Binary chunk
-        if (receiveStartTimeRef.current === 0) receiveStartTimeRef.current = Date.now();
+        if (receiveStartTimeRef.current === 0) {
+          receiveStartTimeRef.current = Date.now();
+        }
+
         receivedChunksRef.current.push(event.data);
         receivedSizeRef.current += event.data.byteLength;
-        
+
         if (fileMetaRef.current?.fileSize) {
-          const p = (receivedSizeRef.current / fileMetaRef.current.fileSize) * 100;
-          setProgress(p);
+          setRecvProgress(
+            (receivedSizeRef.current / fileMetaRef.current.fileSize) * 100
+          );
         }
-        
-        const elapsedSecs = (Date.now() - receiveStartTimeRef.current) / 1000;
-        if (elapsedSecs > 0) {
-           setSpeedMBps((receivedSizeRef.current / 1024 / 1024) / elapsedSecs);
+
+        const elapsed = (Date.now() - receiveStartTimeRef.current) / 1000;
+        if (elapsed > 0) {
+          setRecvSpeed(receivedSizeRef.current / 1024 / 1024 / elapsed);
         }
       }
     };
-  };
+  }, [addLog]); // Only depends on addLog (which is stable via useCallback([]))
 
+  // ── WebSocket + WebRTC setup (runs ONCE per code) ────────────
   useEffect(() => {
     if (!code) return;
 
@@ -173,14 +211,9 @@ export default function RoomPage() {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      setStatus("Connected to socket. Waiting for peer to arrive...");
-      addLog("WebSocket connection securely established");
-      ws.send(
-        JSON.stringify({
-          type: "join-room",
-          roomCode: code,
-        })
-      );
+      setStatus("Waiting for receiver...");
+      addLog("Signaling connected");
+      ws.send(JSON.stringify({ type: "join-room", roomCode: code }));
     };
 
     const pc = new RTCPeerConnection({
@@ -188,17 +221,14 @@ export default function RoomPage() {
     });
     pcRef.current = pc;
 
-    // Receive DataChannel (Receiver Side)
     pc.ondatachannel = (event) => {
-      addLog("Receiving incoming DataChannel from peer...");
-      const channel = event.channel;
-      dataChannelRef.current = channel;
-      setupDataChannel(channel);
+      addLog("DataChannel received from peer");
+      dataChannelRef.current = event.channel;
+      setupDataChannel(event.channel);
     };
 
     pc.onicecandidate = (event) => {
       if (event.candidate && ws.readyState === WebSocket.OPEN) {
-        addLog("Transmitting ICE candidate route");
         ws.send(
           JSON.stringify({
             type: "ice-candidate",
@@ -210,61 +240,41 @@ export default function RoomPage() {
     };
 
     pc.onconnectionstatechange = () => {
-      addLog(`WebRTC State: ${pc.connectionState}`);
-      if (pc.connectionState === 'connected') {
-        setStatus("Peer connected successfully! P2P pipeline is active.");
+      addLog(`RTC state: ${pc.connectionState}`);
+      if (pc.connectionState === "connected") {
+        setStatus("Peer connected");
       }
     };
 
     ws.onmessage = async (msg) => {
       const data = JSON.parse(msg.data);
       if (data.error) {
-        addLog(`Signaling Error: ${data.error}`);
+        addLog(`Error: ${data.error}`);
         return;
       }
-      addLog(`Signaling Event: ${data.type?.toUpperCase() || 'UNKNOWN'}`);
 
       if (data.type === "peer-joined") {
-        setStatus("Peer joined. Initiating offer handshake...");
-        
-        // Create DataChannel (Sender Side)
-        addLog("Orchestrating P2P File Data Channel");
+        setStatus("Peer joined — connecting...");
         const channel = pc.createDataChannel("file");
         dataChannelRef.current = channel;
         setupDataChannel(channel);
 
-        addLog("Generating Local WebRTC Offer");
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-
         ws.send(
-          JSON.stringify({
-            type: "offer",
-            roomCode: code,
-            payload: offer,
-          })
+          JSON.stringify({ type: "offer", roomCode: code, payload: offer })
         );
       } else if (data.type === "offer") {
-        setStatus("Received offer. Calculating answer...");
-        addLog("Setting Remote Description (Offer)");
+        setStatus("Connecting...");
         await pc.setRemoteDescription(data.payload);
-
-        addLog("Drafting WebRTC Answer");
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-
         ws.send(
-          JSON.stringify({
-            type: "answer",
-            roomCode: code,
-            payload: answer,
-          })
+          JSON.stringify({ type: "answer", roomCode: code, payload: answer })
         );
       } else if (data.type === "answer") {
-        addLog("Applying Remote Answer");
         await pc.setRemoteDescription(data.payload);
       } else if (data.type === "ice-candidate") {
-        addLog("Adding Remote ICE candidate bypass");
         await pc.addIceCandidate(data.payload);
       }
     };
@@ -273,85 +283,117 @@ export default function RoomPage() {
       ws.close();
       pc.close();
     };
-  }, [code]);
+  }, [code, addLog, setupDataChannel]);
 
-  // Send logic migrated to custom hook `useFileTransfer`
+  // ── Manifest accept/reject handlers ──────────────────────────
+  const handleManifestAccept = (acceptedIds) => {
+    const channel = dataChannelRef.current;
+    if (channel && channel.readyState === "open") {
+      channel.send(JSON.stringify({ type: "manifest-accept", acceptedIds }));
+    }
+    addLog(`Accepted ${acceptedIds.length} file(s)`);
+    setIncomingManifest(null);
+  };
+
+  const handleManifestReject = () => {
+    const channel = dataChannelRef.current;
+    if (channel && channel.readyState === "open") {
+      channel.send(JSON.stringify({ type: "manifest-reject" }));
+    }
+    addLog("Declined all files");
+    setIncomingManifest(null);
+  };
+
+  // ── Status message logic ─────────────────────────────────────
+  const getStatusMessage = () => {
+    if (transferPhase === "complete") return "Transfer complete";
+    if (transferPhase === "transferring") return "Transferring...";
+    if (transferPhase === "waiting-approval") return "Waiting for approval...";
+    if (recvProgress > 0 && recvProgress < 100) return `Receiving: ${recvFileName}`;
+    if (isChannelReady) return "Peer connected";
+    return status;
+  };
+
+  const isConnected = isChannelReady || status === "Peer connected";
+  const isSender = role === "sender" || stagedFiles.length > 0;
+  const isReceiver = role === "receiver";
+  const showReceiverProgress = isReceiver && recvProgress > 0;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#f7f7f7] relative px-6">
       <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay"></div>
 
       <div className="z-10 w-full flex flex-col items-center">
-        
-        {/* Drop Zone (If no files queued) */}
-        {(!queueRaw || queueRaw.length === 0) && !currentFile && !incomingRequest && (
-          <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-10 shadow-sm hover:shadow-md transition-all duration-300 w-[360px] text-center">
-             <h2 className="text-xl font-semibold mb-2 text-[#0a0a0a]">You're connected!</h2>
-             <p className="text-sm text-[#6b6b6b] mb-8">
-                Room Code: <span className="font-mono text-[#0a0a0a] bg-gray-100 px-2 py-1 rounded">{code}</span>
-             </p>
-             <p className="text-sm text-[#6b6b6b] mb-4">Drop files here to share</p>
-             <input type="file" multiple className="hidden" id="fileInput" onChange={(e) => addFiles(e.target.files)} />
-             <label
-               htmlFor="fileInput"
-               className="cursor-pointer text-sm font-medium px-6 py-3 bg-[#111111] text-white rounded-full hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 inline-block"
-             >
-               Select Files
-             </label>
-             <p className="text-xs text-[#6b6b6b] mt-6 flex justify-center items-center gap-2">
-               <span className={`w-2 h-2 rounded-full inline-block ${status.includes('P2P pipeline is active') ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></span>
-               {status.includes('P2P pipeline is active') ? 'Peer Connected' : 'Waiting for receiver...'}
-             </p>
-          </div>
-        )}
-
-        {/* Sender Status Sheet (If files are actively queued) */}
-        {((queueRaw && queueRaw.length > 0) || currentFile) && !incomingRequest && (
-          <div className="bg-white rounded-2xl p-8 shadow-sm w-[360px] text-center border border-[rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
-            <h2 className="text-lg font-medium mb-2 text-[#0a0a0a]">Your link is ready</h2>
-            <p className="text-xs text-[#6b6b6b] mb-6">Keep this page open while sharing</p>
+        {/* ── SENDER VIEW ─────────────────────────────── */}
+        {isSender && (
+          <div className="bg-white rounded-2xl p-8 shadow-sm w-[380px] text-center border border-[rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
+            <h2 className="text-lg font-semibold mb-1 text-[#0a0a0a]">
+              Your link is ready
+            </h2>
+            <p className="text-xs text-[#6b6b6b] mb-6">
+              Share this link to start transfer
+            </p>
 
             <div className="flex justify-center mb-6">
-               <QRCodeCanvas value={roomUrl || code} size={140} bgColor={"#ffffff"} fgColor={"#111111"} />
+              <QRCodeCanvas value={roomUrl || code} size={140} bgColor="#ffffff" fgColor="#111111" />
             </div>
 
-            <div className="bg-gray-100 p-3 rounded-lg text-xs mb-4 text-[#6b6b6b] font-mono break-all border border-[rgba(0,0,0,0.06)]">
+            <div className="bg-[#f7f7f7] p-3 rounded-lg text-xs mb-4 text-[#6b6b6b] font-mono break-all border border-[rgba(0,0,0,0.06)]">
               {roomUrl || code}
             </div>
 
-            <button 
+            <button
               onClick={() => navigator.clipboard.writeText(roomUrl || code)}
               className="bg-[#111111] text-white px-6 py-2.5 rounded-full text-sm font-medium hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 w-full mb-4"
             >
               Copy Link
             </button>
 
-            {activeProgress > 0 && activeProgress < 100 && (
-              <div className="w-full bg-gray-100 rounded-full h-2 mb-2 overflow-hidden border border-[rgba(0,0,0,0.06)]">
-                <div
-                  className="bg-[#111111] h-full rounded-full transition-all duration-300"
-                  style={{ width: `${activeProgress}%` }}
-                ></div>
-              </div>
-            )}
-            
-            <p className="text-xs text-[#6b6b6b] my-2 truncate">
-              {currentFile ? `Sending: ${currentFile.name} (${activeProgress.toFixed(1)}%) - ${activeSpeedMBps.toFixed(2)} MB/s` : ""}
-            </p>
+            <FileQueueUI stagedFiles={stagedFiles} currentFile={currentFile} />
 
-            <p className="text-xs text-[#6b6b6b] mt-4 flex justify-center items-center gap-2 pt-4 border-t border-[rgba(0,0,0,0.06)]">
-              <span className={`w-2 h-2 rounded-full inline-block ${status.includes('P2P pipeline is active') ? 'bg-green-500' : 'bg-yellow-500 animate-pulse'}`}></span>
-              {status.includes('P2P pipeline is active') ? "Transferring..." : "Waiting for receiver..."}
+            <p className="text-xs text-[#6b6b6b] mt-6 flex justify-center items-center gap-2 pt-4 border-t border-[rgba(0,0,0,0.06)]">
+              <span className={`w-2 h-2 rounded-full inline-block ${isConnected ? "bg-green-500" : "bg-yellow-500 animate-pulse"}`}></span>
+              {getStatusMessage()}
             </p>
           </div>
         )}
 
+        {/* ── RECEIVER VIEW ───────────────────────────── */}
+        {!isSender && !showReceiverProgress && (
+          <div className="bg-white rounded-2xl p-8 shadow-sm w-[360px] text-center border border-[rgba(0,0,0,0.06)]">
+            <h2 className="text-lg font-semibold mb-2 text-[#0a0a0a]">SwiftShare</h2>
+            <p className="text-sm text-[#6b6b6b] mb-1">
+              Room: <span className="font-mono text-[#0a0a0a]">{code}</span>
+            </p>
+            <p className="text-xs text-[#6b6b6b] mt-4 flex justify-center items-center gap-2">
+              <span className={`w-2 h-2 rounded-full inline-block ${isConnected ? "bg-green-500" : "bg-yellow-500 animate-pulse"}`}></span>
+              {isConnected ? "Connected — waiting for files..." : "Connecting..."}
+            </p>
+          </div>
+        )}
+
+        {/* ── RECEIVER DOWNLOAD PROGRESS ──────────────── */}
+        {showReceiverProgress && (
+          <div className="bg-white rounded-2xl p-8 shadow-sm w-[360px] text-center border border-[rgba(0,0,0,0.06)]">
+            <p className="text-sm text-[#6b6b6b] mb-2">Receiving</p>
+            <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1 truncate">{recvFileName}</h2>
+            <p className="text-xs text-[#6b6b6b] mb-4">
+              {recvProgress.toFixed(0)}% · {recvSpeed.toFixed(1)} MB/s
+            </p>
+            <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-[rgba(0,0,0,0.06)]">
+              <div
+                className="bg-[#111111] h-full rounded-full transition-all duration-200"
+                style={{ width: `${Math.min(recvProgress, 100)}%` }}
+              ></div>
+            </div>
+          </div>
+        )}
       </div>
-      
-      <TransferRequest 
-        request={incomingRequest} 
-        onAccept={handleAccept} 
-        onReject={handleReject} 
+
+      <TransferRequest
+        manifest={incomingManifest}
+        onAccept={handleManifestAccept}
+        onReject={handleManifestReject}
       />
     </div>
   );

@@ -513,6 +513,12 @@ export default function RoomPage() {
     if (sessionState === STATES.TRANSFERRING) return "Transferring...";
     if (sessionState === STATES.WAITING_FOR_PEER)
       return "Waiting for approval...";
+    if (
+      sessionState === STATES.CONNECTED &&
+      stagedFiles.length > 0 &&
+      stagedFiles.every((f) => f.status === "rejected")
+    )
+      return "Files declined — select new files";
     if (recvProgress > 0 && recvProgress < 100)
       return `Receiving: ${recvFileName}`;
     if (isChannelReady) return "Peer connected";
@@ -573,9 +579,10 @@ export default function RoomPage() {
               currentFile={currentFile}
             />
 
-            {/* Send Again / Select Files when no files staged */}
-            {(sessionState === STATES.COMPLETED || 
-              (sessionState === STATES.CONNECTED && stagedFiles.length === 0)) && (
+            {/* Select Files: show when sender has no active files */}
+            {stagedFiles.filter((f) => f.status !== "rejected").length === 0 &&
+              sessionState !== STATES.TRANSFERRING &&
+              sessionState !== STATES.WAITING_FOR_PEER && (
               <>
                 <p className="text-sm text-[#6b6b6b] mt-4 mb-3">
                   Select files to send

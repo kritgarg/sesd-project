@@ -254,7 +254,21 @@ export function useFileTransfer(dataChannelRef, addLog) {
 
     if (response.type === "manifest-reject") {
       addLog?.("Receiver declined all files.");
+
+      // Mark all as rejected so UI shows it
+      setStagedFiles((prev) =>
+        prev.map((f) => ({ ...f, status: "rejected" }))
+      );
       setSessionState(STATES.CONNECTED);
+
+      // Clear after a brief moment so sender sees "rejected" then gets the picker
+      setTimeout(() => {
+        setStagedFiles([]);
+        stagedFilesRef.current = [];
+        const newId = generateId();
+        transferIdRef.current = newId;
+        setTransferId(newId);
+      }, 2000);
       return;
     }
 

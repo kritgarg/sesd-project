@@ -11,12 +11,27 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
 
   if (!manifest || !manifest.files || manifest.files.length === 0) return null;
 
+  // ── Duplicate check ──────────────────────────────────────
+  if (typeof window !== "undefined" && manifest.transferId) {
+    try {
+      const completed = JSON.parse(
+        localStorage.getItem("swiftshare_completed") || "[]"
+      );
+      if (completed.includes(manifest.transferId)) {
+        return null; // Already handled this transfer
+      }
+    } catch {}
+  }
+
   const allSelected =
     manifest.files.length > 0 &&
     manifest.files.every((f) => selected[f.id] !== false);
 
   const toggleFile = (id) => {
-    setSelected((prev) => ({ ...prev, [id]: prev[id] === false ? true : false }));
+    setSelected((prev) => ({
+      ...prev,
+      [id]: prev[id] === false ? true : false,
+    }));
   };
 
   const toggleAll = () => {
@@ -33,14 +48,25 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
   const selectedFiles = manifest.files.filter((f) => selected[f.id] !== false);
 
   const handleAccept = () => {
-    const ids = selectedFiles.map((f) => f.id);
-    onAccept(ids);
+    // Store transferId to prevent duplicate downloads on reload
+    if (typeof window !== "undefined" && manifest.transferId) {
+      try {
+        const completed = JSON.parse(
+          localStorage.getItem("swiftshare_completed") || "[]"
+        );
+        completed.push(manifest.transferId);
+        localStorage.setItem(
+          "swiftshare_completed",
+          JSON.stringify(completed)
+        );
+      } catch {}
+    }
+    onAccept(selectedFiles.map((f) => f.id));
   };
 
   return (
     <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100] px-4">
       <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-8 shadow-md w-[380px] z-10 transition-all duration-300">
-
         <p className="text-sm text-[#6b6b6b] mb-1">Incoming files</p>
         <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1">
           {manifest.files.length} file{manifest.files.length > 1 ? "s" : ""}
@@ -49,7 +75,6 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
           Total: {formatSize(totalSize)}
         </p>
 
-        {/* File list */}
         <div className="space-y-2 mb-6 max-h-[240px] overflow-y-auto">
           {manifest.files.map((file) => {
             const isOn = selected[file.id] !== false;
@@ -81,7 +106,6 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
           })}
         </div>
 
-        {/* Select all toggle */}
         <button
           onClick={toggleAll}
           className="text-xs text-[#6b6b6b] mb-4 hover:text-[#0a0a0a] transition-colors"
@@ -89,7 +113,6 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
           {allSelected ? "Deselect all" : "Select all"}
         </button>
 
-        {/* Actions */}
         <div className="flex flex-col gap-3">
           <button
             onClick={handleAccept}

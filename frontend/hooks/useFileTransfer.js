@@ -1,51 +1,95 @@
 import { useRef, useState, useCallback } from "react";
 import { generateHash } from "../utils/hash";
 
+const generateId = () => crypto.randomUUID();
+
+// ── Session States ──────────────────────────────────────────
+const STATES = {
+  IDLE: "IDLE",
+  STAGED: "STAGED",
+  WAITING_FOR_PEER: "WAITING_FOR_PEER",
+  CONNECTED: "CONNECTED",
+  TRANSFERRING: "TRANSFERRING",
+  COMPLETED: "COMPLETED",
+};
+
 export function useFileTransfer(dataChannelRef, addLog) {
-  // Staged files (selected but not yet sent)
   const [stagedFiles, setStagedFiles] = useState([]);
   const [currentFile, setCurrentFile] = useState(null);
-  const [fileProgressMap, setFileProgressMap] = useState({});
-  const [transferPhase, setTransferPhase] = useState("idle");
-  // idle | staged | waiting-approval | transferring | complete
+  const [sessionState, setSessionState] = useState(STATES.IDLE);
+  const [transferId, setTransferId] = useState(null);
 
   const resolveApprovalRef = useRef(null);
   const stagedFilesRef = useRef([]);
+  const transferIdRef = useRef(null);
 
-  // Format file size for display
+  // ── Helpers ───────────────────────────────────────────────
   const formatSize = (bytes) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
   };
 
-  // Stage files locally (NO sending, NO connection needed)
-  const stageFiles = useCallback((files) => {
-    if (!files) return;
-    const fileArray = Array.from(files).map((file, idx) => ({
-      id: `${Date.now()}-${idx}`,
-      file,
-      name: file.name,
-      size: file.size,
-      type: file.type,
-      status: "staged", // staged | sending | complete | rejected
-      progress: 0,
-      speed: 0,
-    }));
-    setStagedFiles((prev) => [...prev, ...fileArray]);
-    stagedFilesRef.current = [...stagedFilesRef.current, ...fileArray];
-    setTransferPhase("staged");
-    addLog?.(`${fileArray.length} file(s) staged for transfer`);
-  }, [addLog]);
+  // ── Stage files (no connection needed) ────────────────────
+  const stageFiles = useCallback(
+    (files) => {
+      if (!files) return;
+      const fileArray = Array.from(files).map((file, idx) => ({
+        id: `${Date.now()}-${idx}`,
+        file,
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        status: "staged",
+        progress: 0,
+        speed: 0,
+      }));
+      setStagedFiles((prev) => [...prev, ...fileArray]);
+      stagedFilesRef.current = [...stagedFilesRef.current, ...fileArray];
 
-  // Send manifest to receiver (called when DataChannel opens)
+      // Generate new transfer ID
+      if (!transferIdRef.current) {
+        const id = generateId();
+        transferIdRef.current = id;
+        setTransferId(id);
+      }
+
+      setSessionState(STATES.STAGED);
+      addLog?.(`${fileArray.length} file(s) staged`);
+
+      // If channel is already open, auto-send manifest
+      const ch = dataChannelRef.current;
+      if (ch && ch.readyState === "open") {
+        setTimeout(() => {
+          // Re-read refs since we just updated them
+          const manifest = {
+            type: "file-list",
+            transferId: transferIdRef.current,
+            files: stagedFilesRef.current.map((f) => ({
+              id: f.id,
+              name: f.name,
+              size: f.size,
+              type: f.type,
+            })),
+          };
+          ch.send(JSON.stringify(manifest));
+          setSessionState(STATES.WAITING_FOR_PEER);
+          addLog?.(`Manifest auto-sent (${manifest.files.length} files)`);
+        }, 200);
+      }
+    },
+    [addLog, dataChannelRef]
+  );
+
+  // ── Send manifest ────────────────────────────────────────
   const sendManifest = useCallback(() => {
-    const channel = dataChannelRef.current;
-    if (!channel || channel.readyState !== "open") return;
+    const ch = dataChannelRef.current;
+    if (!ch || ch.readyState !== "open") return;
     if (stagedFilesRef.current.length === 0) return;
 
     const manifest = {
       type: "file-list",
+      transferId: transferIdRef.current,
       files: stagedFilesRef.current.map((f) => ({
         id: f.id,
         name: f.name,
@@ -54,96 +98,97 @@ export function useFileTransfer(dataChannelRef, addLog) {
       })),
     };
 
-    channel.send(JSON.stringify(manifest));
-    setTransferPhase("waiting-approval");
-    addLog?.(`Manifest sent: ${manifest.files.length} file(s), ${formatSize(manifest.files.reduce((a, f) => a + f.size, 0))} total`);
+    ch.send(JSON.stringify(manifest));
+    setSessionState(STATES.WAITING_FOR_PEER);
+    addLog?.(
+      `Manifest sent (${manifest.files.length} files, ${formatSize(
+        manifest.files.reduce((a, f) => a + f.size, 0)
+      )})`
+    );
   }, [dataChannelRef, addLog]);
 
-  // Handle receiver's approval response
+  // ── Handle manifest response from receiver ───────────────
   const handleManifestResponse = useCallback((data) => {
-    // data = { type: "manifest-accept", acceptedIds: [...] }
-    // or   = { type: "manifest-reject" }
     if (resolveApprovalRef.current) {
       resolveApprovalRef.current(data);
     }
   }, []);
 
-  // Start the actual transfer (called after approval)
-  const beginTransfer = useCallback(async (acceptedIds) => {
-    const channel = dataChannelRef.current;
-    if (!channel || channel.readyState !== "open") {
-      addLog?.("Channel unavailable for transfer.");
-      return;
-    }
+  // ── Begin transfer (after approval) ──────────────────────
+  const beginTransfer = useCallback(
+    async (acceptedIds) => {
+      const ch = dataChannelRef.current;
+      if (!ch || ch.readyState !== "open") {
+        addLog?.("Channel not open — cannot transfer.");
+        return;
+      }
 
-    setTransferPhase("transferring");
-    const filesToSend = stagedFilesRef.current.filter((f) =>
-      acceptedIds.includes(f.id)
-    );
+      setSessionState(STATES.TRANSFERRING);
 
-    // Mark rejected files
-    const rejectedIds = stagedFilesRef.current
-      .filter((f) => !acceptedIds.includes(f.id))
-      .map((f) => f.id);
-
-    if (rejectedIds.length > 0) {
-      setStagedFiles((prev) =>
-        prev.map((f) =>
-          rejectedIds.includes(f.id) ? { ...f, status: "rejected" } : f
-        )
+      const filesToSend = stagedFilesRef.current.filter((f) =>
+        acceptedIds.includes(f.id)
       );
-      addLog?.(`${rejectedIds.length} file(s) declined by receiver`);
-    }
+      const rejectedIds = stagedFilesRef.current
+        .filter((f) => !acceptedIds.includes(f.id))
+        .map((f) => f.id);
 
-    addLog?.(`Starting transfer of ${filesToSend.length} file(s)...`);
+      if (rejectedIds.length > 0) {
+        setStagedFiles((prev) =>
+          prev.map((f) =>
+            rejectedIds.includes(f.id) ? { ...f, status: "rejected" } : f
+          )
+        );
+        addLog?.(`${rejectedIds.length} file(s) declined`);
+      }
 
-    for (const stagedFile of filesToSend) {
-      setCurrentFile(stagedFile);
-      setStagedFiles((prev) =>
-        prev.map((f) =>
-          f.id === stagedFile.id ? { ...f, status: "sending" } : f
-        )
-      );
+      addLog?.(`Transferring ${filesToSend.length} file(s)...`);
 
-      await sendSingleFile(stagedFile, channel);
+      for (const sf of filesToSend) {
+        setCurrentFile(sf);
+        setStagedFiles((prev) =>
+          prev.map((f) =>
+            f.id === sf.id ? { ...f, status: "sending" } : f
+          )
+        );
 
-      setStagedFiles((prev) =>
-        prev.map((f) =>
-          f.id === stagedFile.id
-            ? { ...f, status: "complete", progress: 100 }
-            : f
-        )
-      );
-    }
+        await sendSingleFile(sf);
 
-    setCurrentFile(null);
-    setTransferPhase("complete");
-    addLog?.("All transfers complete.");
-  }, [dataChannelRef, addLog]);
+        setStagedFiles((prev) =>
+          prev.map((f) =>
+            f.id === sf.id ? { ...f, status: "complete", progress: 100 } : f
+          )
+        );
+      }
 
-  // Send a single file with chunking, backpressure, and hash
-  const sendSingleFile = async (stagedFile, channel) => {
+      setCurrentFile(null);
+      setSessionState(STATES.COMPLETED);
+      addLog?.("All transfers complete.");
+    },
+    [dataChannelRef, addLog]
+  );
+
+  // ── Send a single file (chunked + hashed) ────────────────
+  const sendSingleFile = async (stagedFile) => {
     const file = stagedFile.file;
-    const CHUNK_SIZE = 16 * 1024;
-    const MAX_BUFFER = 1_000_000;
+    const CHUNK = 16 * 1024;
+    const MAX_BUF = 1_000_000;
     let offset = 0;
 
-    // Always re-read channel from ref in case the passed one is stale
     const ch = dataChannelRef.current;
     if (!ch || ch.readyState !== "open") {
-      addLog?.(`Channel not open — skipping ${file.name}`);
+      addLog?.(`Skipping ${file.name} — channel closed`);
       return;
     }
 
     addLog?.(`Hashing: ${file.name}...`);
-    const fileBuffer = await file.arrayBuffer();
-    const hash = await generateHash(fileBuffer);
-    addLog?.(`SHA-256: ${hash.substring(0, 12)}...`);
+    const buf = await file.arrayBuffer();
+    const hash = await generateHash(buf);
+    addLog?.(`SHA-256: ${hash.substring(0, 12)}`);
 
-    // Send metadata (receiver needs this for reassembly)
     ch.send(
       JSON.stringify({
         type: "metadata",
+        transferId: transferIdRef.current,
         id: stagedFile.id,
         fileName: file.name,
         fileSize: file.size,
@@ -152,19 +197,20 @@ export function useFileTransfer(dataChannelRef, addLog) {
       })
     );
 
-    const startTime = Date.now();
+    const t0 = Date.now();
 
     while (offset < file.size) {
-      if (ch.bufferedAmount > MAX_BUFFER) {
+      // Backpressure
+      if (ch.bufferedAmount > MAX_BUF) {
         await new Promise((resolve) => {
-          const interval = setInterval(() => {
+          const iv = setInterval(() => {
             if (ch.readyState !== "open") {
-              clearInterval(interval);
+              clearInterval(iv);
               resolve(true);
               return;
             }
-            if (ch.bufferedAmount < MAX_BUFFER) {
-              clearInterval(interval);
+            if (ch.bufferedAmount < MAX_BUF) {
+              clearInterval(iv);
               resolve(true);
             }
           }, 50);
@@ -172,24 +218,18 @@ export function useFileTransfer(dataChannelRef, addLog) {
       }
 
       if (ch.readyState !== "open") {
-        addLog?.(`Channel closed during transfer of ${file.name}`);
+        addLog?.(`Channel closed during ${file.name}`);
         return;
       }
 
-      const chunk = file.slice(offset, offset + CHUNK_SIZE);
-      const buffer = await chunk.arrayBuffer();
-      ch.send(buffer);
-      offset += CHUNK_SIZE;
+      const chunk = file.slice(offset, offset + CHUNK);
+      const ab = await chunk.arrayBuffer();
+      ch.send(ab);
+      offset += CHUNK;
 
       const pct = Math.min((offset / file.size) * 100, 100);
-      const elapsed = (Date.now() - startTime) / 1000;
+      const elapsed = (Date.now() - t0) / 1000;
       const speed = elapsed > 0 ? offset / 1024 / 1024 / elapsed : 0;
-
-      // Update per-file progress
-      setFileProgressMap((prev) => ({
-        ...prev,
-        [stagedFile.id]: { progress: pct, speed },
-      }));
 
       setStagedFiles((prev) =>
         prev.map((f) =>
@@ -199,13 +239,13 @@ export function useFileTransfer(dataChannelRef, addLog) {
     }
 
     if (ch.readyState === "open") ch.send("EOF");
-    addLog?.(`Transfer complete: ${file.name}`);
-    await new Promise((r) => setTimeout(r, 500));
+    addLog?.(`Done: ${file.name}`);
+    await new Promise((r) => setTimeout(r, 400));
   };
 
-  // Orchestrator: waits for approval then sends
+  // ── Wait for approval → transfer ─────────────────────────
   const waitForApprovalAndSend = useCallback(async () => {
-    setTransferPhase("waiting-approval");
+    setSessionState(STATES.WAITING_FOR_PEER);
 
     const response = await new Promise((resolve) => {
       resolveApprovalRef.current = resolve;
@@ -214,7 +254,7 @@ export function useFileTransfer(dataChannelRef, addLog) {
 
     if (response.type === "manifest-reject") {
       addLog?.("Receiver declined all files.");
-      setTransferPhase("idle");
+      setSessionState(STATES.CONNECTED);
       return;
     }
 
@@ -223,7 +263,35 @@ export function useFileTransfer(dataChannelRef, addLog) {
     }
   }, [addLog, beginTransfer]);
 
-  // Get total size of staged files
+  // ── Reset for new transfer (keeps connection alive) ──────
+  const resetTransfer = useCallback(() => {
+    setStagedFiles([]);
+    setCurrentFile(null);
+    stagedFilesRef.current = [];
+    const newId = generateId();
+    transferIdRef.current = newId;
+    setTransferId(newId);
+    setSessionState(STATES.CONNECTED);
+    resolveApprovalRef.current = null;
+    addLog?.("Session reset — ready for new transfer");
+  }, [addLog]);
+
+  // ── Get current state snapshot for sync ────────────────
+  const getSyncState = useCallback(() => {
+    return {
+      type: "sync-state",
+      sessionState,
+      transferId: transferIdRef.current,
+      files: stagedFilesRef.current.map((f) => ({
+        id: f.id,
+        name: f.name,
+        size: f.size,
+        type: f.type,
+        status: f.status,
+      })),
+    };
+  }, [sessionState]);
+
   const totalStagedSize = stagedFiles.reduce((a, f) => a + f.size, 0);
 
   return {
@@ -233,9 +301,14 @@ export function useFileTransfer(dataChannelRef, addLog) {
     handleManifestResponse,
     waitForApprovalAndSend,
     currentFile,
-    fileProgressMap,
-    transferPhase,
+    sessionState,
+    setSessionState,
+    transferId,
+    transferPhase: sessionState,
     totalStagedSize,
     formatSize,
+    resetTransfer,
+    getSyncState,
+    STATES,
   };
 }

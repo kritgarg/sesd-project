@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion } from "framer-motion";
 
 function formatSize(bytes) {
   if (bytes < 1024) return `${bytes} B`;
@@ -10,18 +11,6 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
   const [selected, setSelected] = useState({});
 
   if (!manifest || !manifest.files || manifest.files.length === 0) return null;
-
-  // ── Duplicate check ──────────────────────────────────────
-  if (typeof window !== "undefined" && manifest.transferId) {
-    try {
-      const completed = JSON.parse(
-        localStorage.getItem("swiftshare_completed") || "[]"
-      );
-      if (completed.includes(manifest.transferId)) {
-        return null; // Already handled this transfer
-      }
-    } catch {}
-  }
 
   const allSelected =
     manifest.files.length > 0 &&
@@ -48,25 +37,17 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
   const selectedFiles = manifest.files.filter((f) => selected[f.id] !== false);
 
   const handleAccept = () => {
-    // Store transferId to prevent duplicate downloads on reload
-    if (typeof window !== "undefined" && manifest.transferId) {
-      try {
-        const completed = JSON.parse(
-          localStorage.getItem("swiftshare_completed") || "[]"
-        );
-        completed.push(manifest.transferId);
-        localStorage.setItem(
-          "swiftshare_completed",
-          JSON.stringify(completed)
-        );
-      } catch {}
-    }
     onAccept(selectedFiles.map((f) => f.id));
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100] px-4">
-      <div className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-8 shadow-md w-[380px] z-10 transition-all duration-300">
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+        className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-8 shadow-md w-[380px] z-10"
+      >
         <p className="text-sm text-[#6b6b6b] mb-1">Incoming files</p>
         <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1">
           {manifest.files.length} file{manifest.files.length > 1 ? "s" : ""}
@@ -75,11 +56,13 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
           Total: {formatSize(totalSize)}
         </p>
 
-        <div className="space-y-2 mb-6 max-h-[240px] overflow-y-auto">
+        <div className="space-y-2 mb-6 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar">
           {manifest.files.map((file) => {
             const isOn = selected[file.id] !== false;
             return (
-              <label
+              <motion.label
+                whileHover={{ scale: 1.01 }}
+                whileTap={{ scale: 0.99 }}
                 key={file.id}
                 className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
                   isOn
@@ -101,7 +84,7 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
                     {formatSize(file.size)}
                   </p>
                 </div>
-              </label>
+              </motion.label>
             );
           })}
         </div>
@@ -128,7 +111,7 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
             Decline all
           </button>
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

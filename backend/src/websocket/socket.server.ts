@@ -77,7 +77,7 @@ export class SocketServer {
   private async handleMessage(ws: WebSocket, data: any) {
     switch (data.type) {
       case "join-room":
-        await this.joinRoom(ws, data.roomCode);
+        await this.joinRoom(ws, data.roomCode, data.preferredRole);
         break;
 
       case "offer":
@@ -89,7 +89,11 @@ export class SocketServer {
   }
 
   // ✅ VALIDATION + DB SYNC + 2-USER LIMIT + ROLE ASSIGNMENT
-  private async joinRoom(ws: WebSocket, roomCode: string) {
+  private async joinRoom(
+    ws: WebSocket, 
+    roomCode: string, 
+    preferredRole?: "sender" | "receiver"
+  ) {
     const room = await prisma.room.findUnique({
       where: { code: roomCode },
     });
@@ -116,9 +120,9 @@ export class SocketServer {
     client.roomCode = roomCode;
 
     // ── Role assignment ───────────────────────────────────────
-    // Assign opposite of whoever is already in the room.
-    // If nobody is here, default to "sender" (room creator).
-    let assignedRole: "sender" | "receiver" = "sender";
+    // If we have a preferred role and room is empty, use it.
+    // Otherwise, assign opposite of whoever is in the room.
+    let assignedRole: "sender" | "receiver" = preferredRole || "sender";
 
     for (const [, c] of this.clients) {
       if (c.roomCode === roomCode && c.socket !== ws && c.role) {

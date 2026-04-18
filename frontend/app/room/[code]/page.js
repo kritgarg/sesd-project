@@ -7,6 +7,7 @@ import { useFileTransfer } from "../../../hooks/useFileTransfer";
 import { useFileReceiver } from "../../../hooks/useFileReceiver";
 import { useToast, ToastContainer } from "../../../components/Room/Toast";
 import Confetti from "../../../components/Room/Confetti";
+import { motion, AnimatePresence } from "framer-motion";
 import SenderView from "../../../components/Room/SenderView";
 import ReceiverView from "../../../components/Room/ReceiverView";
 import TransferRequest from "../../../components/Room/TransferRequest";
@@ -98,16 +99,26 @@ export default function RoomPage() {
     }
   }, [stageFiles, setRole, code]);
 
-  // ── Auto-trigger approval wait ────────────────────────────
+  // ── Auto-trigger manifest sending when ready ─────────────
   useEffect(() => {
     if (
-      sessionState === STATES.WAITING_FOR_PEER &&
       isChannelReady &&
-      role === "sender"
+      stagedFiles.length > 0 &&
+      (sessionState === STATES.WAITING_FOR_PEER || sessionState === STATES.STAGED)
     ) {
+      addLog("Connection ready — sending manifest...");
+      sendManifest();
       waitForApprovalAndSend();
     }
-  }, [sessionState, isChannelReady, role, waitForApprovalAndSend, STATES]);
+  }, [
+    isChannelReady,
+    stagedFiles.length,
+    sessionState,
+    role,
+    sendManifest,
+    waitForApprovalAndSend,
+    addLog
+  ]);
 
   // ── Toast on state transitions ────────────────────────────
   useEffect(() => {
@@ -143,19 +154,8 @@ export default function RoomPage() {
   onChannelOpenRef.current = (channel) => {
     const isSender =
       roleRef.current === "sender" || stagedFilesRef.current.length > 0;
-    const state = sessionStateRef.current;
 
-    if (
-      isSender &&
-      state !== "COMPLETED" &&
-      state !== "CONNECTED" &&
-      state !== "IDLE"
-    ) {
-      setTimeout(() => {
-        sendManifestRef.current();
-        waitForApprovalRef.current();
-      }, 300);
-    } else if (!isSender) {
+    if (!isSender) {
       setTimeout(() => {
         if (channel.readyState === "open") {
           channel.send(JSON.stringify({ type: "request-sync" }));
@@ -284,37 +284,60 @@ export default function RoomPage() {
       <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay" />
 
       <div className="z-10 w-full flex flex-col items-center">
-        {isSender ? (
-          <SenderView
-            code={code}
-            roomUrl={roomUrl}
-            sessionState={sessionState}
-            STATES={STATES}
-            stagedFiles={stagedFiles}
-            currentFile={currentFile}
-            stageFiles={stageFiles}
-            isConnected={isConnected}
-            statusMessage={getStatusMessage()}
-            status={status}
-            onToast={addToast}
-          />
-        ) : (
-          <ReceiverView
-            code={code}
-            isConnected={isConnected}
-            status={status}
-            recvProgress={recvProgress}
-            recvSpeed={recvSpeed}
-            recvFileName={recvFileName}
-          />
-        )}
+        <AnimatePresence mode="wait">
+          {isSender ? (
+            <motion.div
+              key="sender"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <SenderView
+                code={code}
+                roomUrl={roomUrl}
+                sessionState={sessionState}
+                STATES={STATES}
+                stagedFiles={stagedFiles}
+                currentFile={currentFile}
+                stageFiles={stageFiles}
+                isConnected={isConnected}
+                statusMessage={getStatusMessage()}
+                status={status}
+                onToast={addToast}
+              />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="receiver"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.3 }}
+            >
+              <ReceiverView
+                code={code}
+                isConnected={isConnected}
+                status={status}
+                recvProgress={recvProgress}
+                recvSpeed={recvSpeed}
+                recvFileName={recvFileName}
+              />
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <TransferRequest
-        manifest={incomingManifest}
-        onAccept={handleManifestAccept}
-        onReject={handleManifestReject}
-      />
+      <AnimatePresence>
+        {incomingManifest && (
+          <TransferRequest
+            key={incomingManifest.transferId}
+            manifest={incomingManifest}
+            onAccept={handleManifestAccept}
+            onReject={handleManifestReject}
+          />
+        )}
+      </AnimatePresence>
 
       <ToastContainer toasts={toasts} onRemove={removeToast} />
       <Confetti trigger={showConfetti} />

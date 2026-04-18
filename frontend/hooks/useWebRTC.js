@@ -75,7 +75,12 @@ export function useWebRTC(code, addLog) {
 
     ws.onopen = () => {
       addLog("Signaling connected");
-      ws.send(JSON.stringify({ type: "join-room", roomCode: code }));
+      const stored = sessionStorage.getItem(`swiftshare_role_${code}`);
+      ws.send(JSON.stringify({ 
+        type: "join-room", 
+        roomCode: code,
+        preferredRole: stored
+      }));
     };
 
     ws.onerror = () => {
@@ -89,7 +94,14 @@ export function useWebRTC(code, addLog) {
     };
 
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" },
+        { urls: "stun:stun2.l.google.com:19302" },
+        { urls: "stun:stun3.l.google.com:19302" },
+        { urls: "stun:stun4.l.google.com:19302" },
+        { urls: "stun:stun.services.mozilla.com" },
+      ],
     });
     pcRef.current = pc;
 
@@ -111,12 +123,17 @@ export function useWebRTC(code, addLog) {
       }
     };
 
+    pc.oniceconnectionstatechange = () => {
+      addLog(`ICE: ${pc.iceConnectionState}`);
+    };
+
     pc.onconnectionstatechange = () => {
       addLog(`RTC: ${pc.connectionState}`);
       if (pc.connectionState === "connected") {
         setStatus("Peer connected");
       } else if (pc.connectionState === "failed") {
         setStatus("Connection failed ❌");
+        addLog("WebRTC connection failed — troubleshoot NAT/STUN");
       } else if (pc.connectionState === "disconnected") {
         setStatus("Peer disconnected ❌");
       }
@@ -133,12 +150,9 @@ export function useWebRTC(code, addLog) {
 
       if (data.type === "role-assigned") {
         addLog(`Server role: ${data.role}`);
-        const stored = sessionStorage.getItem(`swiftshare_role_${code}`);
-        if (!stored) {
-          setRole(data.role);
-        }
+        setRole(data.role);
         setStatus(
-          data.role === "sender" || stored === "sender"
+          data.role === "sender"
             ? "Waiting for receiver..."
             : "Connected — waiting for files..."
         );

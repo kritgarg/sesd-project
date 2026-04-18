@@ -121,10 +121,21 @@ export default function RoomPage() {
     }
   }, [sessionState, STATES, addToast]);
 
-  // ── Toast on errors ───────────────────────────────────────
+  // ── Toast on genuine errors (ignore transient disconnects) ──
+  const lastToastedRef = useRef("");
   useEffect(() => {
     if (status.includes("❌")) {
-      addToast(status, "error", 5000);
+      // Ignore normal lifecycle disconnections from toasting as scary red errors
+      if (status.includes("Disconnected") || status.includes("Peer left") || status.includes("Peer disconnected")) {
+        return;
+      }
+      
+      if (lastToastedRef.current !== status) {
+        addToast(status, "error", 5000);
+        lastToastedRef.current = status;
+      }
+    } else {
+      lastToastedRef.current = "";
     }
   }, [status, addToast]);
 

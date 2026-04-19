@@ -30,6 +30,12 @@ export default function HowItWorks() {
             <p className={styles.cardDesc}>Your files flow straight to them via a direct, encrypted pipeline. No intermediate servers means blazing fast and ultra-private transfers.</p>
           </div>
         </div>
+
+        <div style={{ marginTop: '4rem', padding: '1rem', border: '2px solid #FFE600', borderRadius: '12px', textAlign: 'center' }}>
+          <p style={{ color: '#FFE600', fontSize: '1rem', fontWeight: 'bold', textTransform: 'uppercase' }}>
+            Disclaimer: Sender and receiver must be on the same WiFi network for faster transfer. Please do not close the tab until files are fully shared.
+          </p>
+        </div>
       </section>
 
     </div>

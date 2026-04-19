@@ -69,6 +69,10 @@ export default function ReceiverView({
           Reload to reconnect
         </button>
       )}
+
+      <div className="mt-4 pt-2 text-[10px] text-[#121210] font-bold uppercase opacity-80 leading-tight">
+        * Sender and receiver should be on the same WiFi for faster transfer. Please don't close this tab until files are shared.
+      </div>
     </div>
   );
 }

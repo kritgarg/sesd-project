@@ -106,9 +106,14 @@ export default function SenderView({
         </div>
       )}
 
-      <div className="mt-6 flex justify-center items-center gap-2 pt-4 border-t-4 border-[#121210] text-[#121210] font-bold uppercase text-sm">
-        <StatusDot isConnected={isConnected} status={status} />
-        {statusMessage}
+      <div className="mt-6 flex flex-col justify-center items-center gap-2 pt-4 border-t-4 border-[#121210] text-[#121210] font-bold uppercase text-sm">
+        <div className="flex justify-center items-center gap-2">
+          <StatusDot isConnected={isConnected} status={status} />
+          {statusMessage}
+        </div>
+        <div className="text-[10px] mt-2 opacity-80 leading-tight">
+          * Sender and receiver should be on the same WiFi for faster transfer. Please don't close this tab until files are shared.
+        </div>
       </div>
     </div>
   );

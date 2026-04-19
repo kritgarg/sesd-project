@@ -3,9 +3,9 @@ function StatusDot({ isConnected, status }) {
     ? "bg-green-500"
     : status.includes("❌")
     ? "bg-red-500"
-    : "bg-yellow-500 animate-pulse";
+    : "bg-[#FFE600] animate-pulse";
 
-  return <span className={`w-2 h-2 rounded-full inline-block ${color}`} />;
+  return <span className={`w-3 h-3 rounded-full inline-block border-2 border-[#121210] ${color}`} />;
 }
 
 export default function ReceiverView({
@@ -21,17 +21,20 @@ export default function ReceiverView({
 
   if (isReceiving) {
     return (
-      <div className="bg-white rounded-2xl p-8 shadow-sm w-[360px] text-center border border-[rgba(0,0,0,0.06)]">
-        <p className="text-sm text-[#6b6b6b] mb-2">Receiving</p>
-        <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1 truncate">
+      <div 
+        className="bg-[#FFE600] rounded-[32px] p-8 shadow-[0_20px_40px_rgba(0,0,0,0.5)] w-[360px] text-center border-4 border-[#121210] flex flex-col items-center"
+        style={{ fontFamily: 'var(--font-oswald), sans-serif' }}
+      >
+        <p className="text-sm font-bold text-[#121210] mb-2 uppercase">Receiving</p>
+        <h2 className="text-3xl font-bold text-[#121210] mb-1 truncate w-full uppercase tracking-tighter">
           {recvFileName}
         </h2>
-        <p className="text-xs text-[#6b6b6b] mb-4">
+        <p className="text-sm font-bold text-[#121210] mb-6 uppercase">
           {recvProgress.toFixed(0)}% · {recvSpeed.toFixed(1)} MB/s
         </p>
-        <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden border border-[rgba(0,0,0,0.06)]">
+        <div className="w-full bg-[#121210] rounded-full h-8 overflow-hidden border-2 border-[#121210] relative">
           <div
-            className="bg-[#111111] h-full rounded-full transition-all duration-200"
+            className="bg-[#FFE600] h-full transition-all duration-200 border-r-4 border-[#121210]"
             style={{ width: `${Math.min(recvProgress, 100)}%` }}
           />
         </div>
@@ -40,23 +43,28 @@ export default function ReceiverView({
   }
 
   return (
-    <div className="bg-white rounded-2xl p-8 shadow-sm w-[360px] text-center border border-[rgba(0,0,0,0.06)]">
-      <h2 className="text-lg font-semibold mb-2 text-[#0a0a0a]">
-        SwiftShare
+    <div 
+      className="bg-[#FFE600] rounded-[32px] p-8 shadow-[0_20px_40px_rgba(0,0,0,0.5)] w-[360px] text-center border-4 border-[#121210] flex flex-col items-center"
+      style={{ fontFamily: 'var(--font-oswald), sans-serif' }}
+    >
+      <h2 className="text-4xl font-bold mb-2 text-[#121210] uppercase tracking-tighter">
+        SWIFTSHARE
       </h2>
-      <p className="text-sm text-[#6b6b6b] mb-1">
-        Room: <span className="font-mono text-[#0a0a0a]">{code}</span>
+      <p className="text-sm font-bold text-[#121210] mb-4 uppercase">
+        Room: <span className="text-xl bg-[#121210] text-[#FFE600] px-2 py-1 rounded-md ml-2">{code}</span>
       </p>
-      <p className="text-xs text-[#6b6b6b] mt-4 flex justify-center items-center gap-2">
-        <StatusDot isConnected={isConnected} status={status} />
-        {isConnected ? "Connected — waiting for files..." : status}
-      </p>
+      
+      <div className="mt-4 flex flex-col justify-center items-center gap-2 pt-4 border-t-4 border-[#121210] text-[#121210] font-bold uppercase text-sm w-full">
+        <div className="flex items-center gap-2">
+          <StatusDot isConnected={isConnected} status={status} />
+          {isConnected ? "Connected — Waiting for files" : status}
+        </div>
+      </div>
 
-      {/* Reload hint when peer disconnects */}
       {isPeerLeft && (
         <button
           onClick={() => window.location.reload()}
-          className="mt-4 text-xs text-[#0a0a0a] bg-[#f7f7f7] border border-[rgba(0,0,0,0.06)] px-4 py-2 rounded-full hover:bg-[#ebebeb] transition-colors duration-200 cursor-pointer"
+          className="mt-6 bg-[#121210] text-[#FFE600] px-6 py-3 rounded-full text-xl font-bold hover:scale-[1.05] active:scale-[0.98] transition-all duration-200 w-full cursor-pointer uppercase tracking-wide"
         >
           Reload to reconnect
         </button>

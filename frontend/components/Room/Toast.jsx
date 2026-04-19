@@ -4,10 +4,6 @@ import { useState, useCallback, useRef } from "react";
 
 let toastId = 0;
 
-/**
- * Lightweight toast hook — no dependencies.
- * Types: "success" | "error" | "info"
- */
 export function useToast() {
   const [toasts, setToasts] = useState([]);
   const timersRef = useRef({});
@@ -16,7 +12,6 @@ export function useToast() {
     const id = ++toastId;
     setToasts((prev) => [...prev, { id, message, type, exiting: false }]);
 
-    // Start exit animation, then remove
     timersRef.current[id] = setTimeout(() => {
       setToasts((prev) =>
         prev.map((t) => (t.id === id ? { ...t, exiting: true } : t))
@@ -39,21 +34,21 @@ export function useToast() {
   return { toasts, addToast, removeToast };
 }
 
-/**
- * Toast container — render once at the page level.
- */
 export function ToastContainer({ toasts, onRemove }) {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="fixed top-6 right-6 z-[200] flex flex-col gap-3 pointer-events-none">
+    <div className="fixed top-6 right-6 z-[200] flex flex-col gap-3 pointer-events-none" style={{ fontFamily: 'var(--font-oswald), sans-serif' }}>
       {toasts.map((toast) => {
         const bgColor =
           toast.type === "success"
-            ? "bg-[#0a0a0a]"
+            ? "bg-[#FFE600]"
             : toast.type === "error"
-            ? "bg-red-600"
-            : "bg-[#333333]";
+            ? "bg-[#FF0055]"
+            : "bg-[#FFE600]";
+
+        const textColor = 
+          toast.type === "success" ? "text-black" : "text-white";
 
         const icon =
           toast.type === "success"
@@ -66,13 +61,13 @@ export function ToastContainer({ toasts, onRemove }) {
           <div
             key={toast.id}
             onClick={() => onRemove(toast.id)}
-            className={`pointer-events-auto cursor-pointer ${bgColor} text-white px-5 py-3 rounded-2xl shadow-lg flex items-center gap-3 text-sm font-medium max-w-[340px] transition-all duration-300 ${
+            className={`pointer-events-auto cursor-pointer ${bgColor} ${textColor} px-6 py-4 rounded-xl border-4 border-[#121210] shadow-[4px_4px_0_#121210] flex items-center gap-4 text-xl font-bold uppercase tracking-wide max-w-[340px] transition-all duration-300 ${
               toast.exiting
-                ? "opacity-0 translate-x-8"
+                ? "opacity-0 translate-x-12"
                 : "opacity-100 translate-x-0 animate-[slideIn_0.3s_ease-out]"
-            }`}
+            } hover:translate-y-[-2px] hover:shadow-[6px_6px_0_#121210]`}
           >
-            <span className="text-base shrink-0">{icon}</span>
+            <span className="text-2xl shrink-0">{icon}</span>
             <span>{toast.message}</span>
           </div>
         );

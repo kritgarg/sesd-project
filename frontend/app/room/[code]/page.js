@@ -280,8 +280,9 @@ export default function RoomPage() {
 
   // ── Render ────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f7f7f7] relative px-6">
-      <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/stardust.png')] mix-blend-overlay" />
+    <div className="min-h-screen flex items-center justify-center bg-[#121210] relative px-6 w-full font-oswald overflow-hidden">
+      {/* Background blobs matching theme */}
+      <div className="absolute inset-0 z-0 opacity-20 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 100% 10%, transparent 60%, rgba(255, 230, 0, 1) 61%, transparent 62%), radial-gradient(circle at 0% 80%, transparent 40%, rgba(255, 230, 0, 1) 41%, transparent 42%)', backgroundSize: '100% 100%, 100% 100%' }} />
 
       <div className="z-10 w-full flex flex-col items-center">
         <AnimatePresence mode="wait">

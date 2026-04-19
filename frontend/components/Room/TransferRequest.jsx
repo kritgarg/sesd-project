@@ -41,22 +41,25 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-[100] px-4 backdrop-blur-sm">
+    <div 
+      className="fixed inset-0 bg-[#000000]/80 flex items-center justify-center z-[100] px-4 backdrop-blur-sm"
+      style={{ fontFamily: 'var(--font-oswald), sans-serif' }}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.9, y: 20 }}
-        className="bg-white border border-[rgba(0,0,0,0.06)] rounded-2xl p-8 shadow-md w-[380px] z-10"
+        className="bg-[#FFE600] border-4 border-[#121210] rounded-[32px] p-8 shadow-[0_20px_40px_rgba(0,0,0,0.5)] w-[400px] z-10 flex flex-col"
       >
-        <p className="text-sm text-[#6b6b6b] mb-1">Incoming files</p>
-        <h2 className="text-lg font-semibold text-[#0a0a0a] mb-1">
-          {manifest.files.length} file{manifest.files.length > 1 ? "s" : ""}
+        <p className="text-sm font-bold text-[#121210] mb-1 uppercase tracking-wider">Incoming Files</p>
+        <h2 className="text-4xl font-bold text-[#121210] mb-1 uppercase tracking-tighter">
+          {manifest.files.length} FILE{manifest.files.length > 1 ? "S" : ""}
         </h2>
-        <p className="text-xs text-[#6b6b6b] mb-6">
+        <p className="text-sm font-bold text-[#121210] mb-6 uppercase">
           Total: {formatSize(totalSize)}
         </p>
 
-        <div className="space-y-2 mb-6 max-h-[240px] overflow-y-auto pr-1 custom-scrollbar">
+        <div className="space-y-2 mb-6 max-h-[200px] overflow-y-auto pr-1">
           {manifest.files.map((file) => {
             const isOn = selected[file.id] !== false;
             return (
@@ -64,23 +67,23 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.99 }}
                 key={file.id}
-                className={`flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition-all duration-200 ${
+                className={`flex items-center gap-3 p-3 rounded-xl border-4 cursor-pointer transition-all duration-200 ${
                   isOn
-                    ? "border-[rgba(0,0,0,0.06)] bg-white"
-                    : "border-[rgba(0,0,0,0.03)] bg-gray-50 opacity-50"
+                    ? "border-[#121210] bg-[#121210] text-[#FFE600]"
+                    : "border-[#121210] bg-transparent text-[#121210] opacity-60 hover:opacity-100"
                 }`}
               >
                 <input
                   type="checkbox"
                   checked={isOn}
                   onChange={() => toggleFile(file.id)}
-                  className="accent-[#111111] w-4 h-4"
+                  className="accent-[#FFE600] w-5 h-5 border-2 border-[#121210] rounded-sm bg-[#121210]"
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-[#0a0a0a] truncate">
+                  <p className="text-lg font-bold truncate uppercase tracking-tight">
                     {file.name}
                   </p>
-                  <p className="text-xs text-[#6b6b6b]">
+                  <p className={`text-sm font-bold ${isOn ? 'text-[#FFE600]/80' : 'text-[#121210]/80'} uppercase`}>
                     {formatSize(file.size)}
                   </p>
                 </div>
@@ -91,24 +94,24 @@ export default function TransferRequest({ manifest, onAccept, onReject }) {
 
         <button
           onClick={toggleAll}
-          className="text-xs text-[#6b6b6b] mb-4 hover:text-[#0a0a0a] transition-colors"
+          className="text-sm font-bold text-[#121210] mb-4 hover:underline transition-colors uppercase self-start"
         >
-          {allSelected ? "Deselect all" : "Select all"}
+          {allSelected ? "Deselect All" : "Select All"}
         </button>
 
         <div className="flex flex-col gap-3">
           <button
             onClick={handleAccept}
             disabled={selectedFiles.length === 0}
-            className="w-full bg-[#111111] text-white px-5 py-2.5 rounded-full text-sm font-medium hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 disabled:opacity-30 disabled:cursor-not-allowed"
+            className="w-full bg-[#121210] text-[#FFE600] px-5 py-3 rounded-full text-xl font-bold hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed uppercase tracking-wide border-4 border-[#121210]"
           >
             Accept {selectedFiles.length > 0 ? `(${selectedFiles.length})` : ""}
           </button>
           <button
             onClick={onReject}
-            className="w-full bg-white text-[#6b6b6b] border border-[rgba(0,0,0,0.06)] px-5 py-2.5 rounded-full text-sm font-medium hover:bg-[#f7f7f7] transition-all duration-200"
+            className="w-full bg-transparent text-[#121210] border-4 border-[#121210] px-5 py-3 rounded-full text-xl font-bold hover:bg-[#121210] hover:text-[#FFE600] transition-all duration-200 uppercase tracking-wide"
           >
-            Decline all
+            Decline All
           </button>
         </div>
       </motion.div>

@@ -1,0 +1,479 @@
+/* Preloader */
+.preloader {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+}
+
+.preloaderTop, .preloaderBottom {
+  flex: 1;
+  background-color: #FFE600;
+  transition: transform 1.2s cubic-bezier(0.77, 0, 0.175, 1);
+  will-change: transform;
+}
+
+/* When loaded, top goes up, bottom goes down */
+.preloader.loaded .preloaderTop {
+  transform: translateY(-100%);
+}
+.preloader.loaded .preloaderBottom {
+  transform: translateY(100%);
+}
+
+.pageWrapper {
+  min-height: 100vh;
+  background-color: #121210;
+  color: #FFE600;
+  font-family: var(--font-oswald), sans-serif;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 4rem 1rem;
+}
+
+/* Background thin squiggly lines using SVG background or CSS pseudo */
+.pageWrapper::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    radial-gradient(circle at 100% 10%, transparent 60%, rgba(255, 230, 0, 0.2) 61%, transparent 62%),
+    radial-gradient(circle at 0% 80%, transparent 40%, rgba(255, 230, 0, 0.2) 41%, transparent 42%);
+  background-size: 100% 100%, 100% 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.mainContent {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.yellowCardContainer {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* Complex shape mimicking the image */
+  filter: drop-shadow(0 20px 40px rgba(0,0,0,0.5));
+}
+
+.yellowTop, .yellowBottom {
+  background: #FFE600;
+  width: 100%;
+  padding: 2rem 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.yellowTop {
+  border-radius: 40px 40px 0 0;
+  padding-bottom: 0.5rem;
+  border-bottom-left-radius: 20px;
+  border-bottom-right-radius: 20px;
+}
+
+.yellowBottom {
+  border-radius: 0 0 40px 40px;
+  padding-top: 0.5rem;
+  margin-top: 1.5rem; /* Gap for the dent */
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  min-height: 200px;
+  justify-content: center;
+}
+
+.cardText {
+  color: #121210;
+  font-size: 6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  line-height: 0.85;
+  text-align: center;
+  margin: 0;
+  letter-spacing: -2px;
+}
+
+.scriptText {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-5deg);
+  font-family: var(--font-marker), cursive;
+  font-size: 3rem;
+  color: #FFFFFF;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+  text-shadow: 2px 2px 10px rgba(0,0,0,0.2);
+}
+
+.navBar {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  background: #FFE600;
+  color: #121210;
+  padding: 0.75rem 2rem;
+  border-radius: 50px;
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  font-family: var(--font-oswald), sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  z-index: 20;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+  transition: transform 0.3s;
+}
+.navBar:hover {
+  transform: translateX(-50%) rotate(0deg) scale(1.05);
+}
+
+.navIcon {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.navLines div {
+  width: 20px;
+  height: 3px;
+  background: #121210;
+  margin: 4px 0;
+}
+.navBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 16px;
+}
+.navBars div {
+  width: 3px;
+  background: #121210;
+}
+
+/* File Actions / Drop zone within the yellow bottom part */
+.actionArea {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  padding: 0 2rem;
+  margin-top: 1.5rem; /* Prevents overlapping the giant text */
+}
+
+.fileList {
+  width: 100%;
+  background: #121210;
+  color: #FFE600;
+  border-radius: 12px;
+  padding: 1rem;
+  max-height: 120px;
+  overflow-y: auto;
+  margin-bottom: 1rem;
+  font-family: -apple-system, sans-serif;
+}
+
+/* Custom internal scrollbar for fileList */
+.fileList::-webkit-scrollbar {
+  width: 6px;
+}
+.fileList::-webkit-scrollbar-track {
+  background: rgba(255, 230, 0, 0.1);
+  border-radius: 10px;
+}
+.fileList::-webkit-scrollbar-thumb {
+  background: rgba(255, 230, 0, 0.5);
+  border-radius: 10px;
+}
+.fileList::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 230, 0, 0.8);
+}
+
+
+.fileItem {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255,230,0,0.2);
+  padding: 0.25rem 0;
+  font-size: 0.9rem;
+}
+.removeBtn {
+  color: #ff4444;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.startBtn {
+  background: #121210;
+  color: #FFE600;
+  border: none;
+  border-radius: 50px;
+  padding: 1rem 3rem;
+  font-size: 1.5rem;
+  font-family: var(--font-oswald), sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: transform 0.2s, background 0.2s;
+  letter-spacing: 1px;
+}
+.startBtn:hover {
+  transform: scale(1.05);
+  background: #000;
+}
+
+.browseBtn {
+  background: transparent;
+  color: #121210;
+  border: 3px solid #121210;
+  border-radius: 50px;
+  padding: 0.5rem 2rem;
+  font-size: 1.25rem;
+  font-family: var(--font-oswald), sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.browseBtn:hover {
+  background: #121210;
+  color: #FFE600;
+}
+
+.dragActive {
+  background: #121210;
+}
+.dragActive .browseBtn {
+  color: #FFE600;
+  border-color: #FFE600;
+}
+.dragActive .cardText {
+  color: #FFE600;
+}
+
+/* Top Down Arrow SVG */
+.arrowIcon {
+  position: absolute;
+  top: -40px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #FFE600;
+  width: 30px;
+  height: 30px;
+  animation: bounce 2s infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translate(-50%, 0); }
+  50% { transform: translate(-50%, 10px); }
+}
+
+.loadingSpinner {
+  width: 60px;
+  height: 60px;
+  border: 4px solid rgba(18,18,16,0.2);
+  border-left-color: #121210;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+
+/* Sidebar Styles */
+.sidebarOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(18, 18, 16, 0.8);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s;
+}
+
+.sidebarOverlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 350px;
+  max-width: 80vw;
+  height: 100vh;
+  background: #FFE600;
+  color: #121210;
+  z-index: 1000;
+  transform: translateX(-100%);
+  transition: transform 0.4s cubic-bezier(0.77, 0, 0.175, 1);
+  display: flex;
+  flex-direction: column;
+  padding: 4rem 2rem;
+  font-family: var(--font-oswald), sans-serif;
+  box-shadow: 20px 0 40px rgba(0,0,0,0.5);
+}
+
+.sidebar.open {
+  transform: translateX(0);
+}
+
+.closeSidebarBtn {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  background: transparent;
+  border: none;
+  font-size: 2rem;
+  color: #121210;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sidebarTitle {
+  font-size: 3.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 3rem;
+  line-height: 0.9;
+  letter-spacing: -1px;
+}
+
+.sidebarMenu {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.sidebarLink {
+  font-size: 2.5rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #121210;
+  text-decoration: none;
+  transition: transform 0.2s;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebarLink:hover {
+  transform: translateX(10px);
+}
+
+.socialLinks {
+  margin-top: auto;
+  display: flex;
+  gap: 1.5rem;
+}
+
+.socialIcon {
+  font-size: 1.5rem;
+  color: #121210;
+  text-decoration: none;
+  font-weight: 700;
+  text-transform: uppercase;
+  transition: opacity 0.2s;
+}
+
+.socialIcon:hover {
+  opacity: 0.6;
+}
+
+/* How It Works Section */
+.howItWorks {
+  margin-top: 6rem;
+  width: 100%;
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 2rem 6rem;
+  z-index: 10;
+}
+
+.howTitle {
+  font-size: 4rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #FFE600;
+  margin-bottom: 3rem;
+  letter-spacing: -1px;
+}
+
+.cardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 2rem;
+  width: 100%;
+}
+
+.howCard {
+  background: #121210;
+  border: 4px solid #FFE600;
+  border-radius: 20px;
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+  box-shadow: 4px 4px 0 #FFE600;
+}
+
+.howCard:hover {
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 12px 12px 0 #FFE600;
+}
+
+.cardStep {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #121210;
+  background: #FFE600;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  margin-bottom: 1.5rem;
+}
+
+.cardHeader {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #FFE600;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.cardDesc {
+  color: #FFFFFF;
+  font-size: 1.1rem;
+  line-height: 1.5;
+  font-family: -apple-system, sans-serif;
+  opacity: 0.9;
+}

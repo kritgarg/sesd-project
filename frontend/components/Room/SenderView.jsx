@@ -6,9 +6,9 @@ function StatusDot({ isConnected, status }) {
     ? "bg-green-500"
     : status.includes("❌")
     ? "bg-red-500"
-    : "bg-yellow-500 animate-pulse";
+    : "bg-[#FFE600] animate-pulse";
 
-  return <span className={`w-2 h-2 rounded-full inline-block ${color}`} />;
+  return <span className={`w-3 h-3 rounded-full inline-block border-2 border-[#121210] ${color}`} />;
 }
 
 export default function SenderView({
@@ -24,7 +24,6 @@ export default function SenderView({
   status,
   onToast,
 }) {
-  // Show picker when no files are pending/sending
   const pendingFiles = stagedFiles.filter(
     (f) => f.status === "staged" || f.status === "sending"
   );
@@ -39,32 +38,35 @@ export default function SenderView({
   };
 
   return (
-    <div className="bg-white rounded-2xl p-8 shadow-sm w-[380px] text-center border border-[rgba(0,0,0,0.06)] hover:shadow-md transition-all duration-300">
-      <h2 className="text-lg font-semibold mb-1 text-[#0a0a0a]">
+    <div 
+      className="bg-[#FFE600] rounded-[32px] p-8 shadow-[0_20px_40px_rgba(0,0,0,0.5)] w-[380px] text-center border-4 border-[#121210] flex flex-col relative"
+      style={{ fontFamily: 'var(--font-oswald), sans-serif' }}
+    >
+      <h2 className="text-4xl font-bold mb-1 text-[#121210] uppercase tracking-tighter leading-none">
         {sessionState === STATES.COMPLETED
-          ? "Transfer complete"
-          : "Your link is ready"}
+          ? "COMPLETED"
+          : "READY TO SEND"}
       </h2>
-      <p className="text-xs text-[#6b6b6b] mb-6">
+      <p className="text-sm font-bold text-[#121210] mb-6 uppercase">
         {sessionState === STATES.COMPLETED
           ? "All files sent successfully"
           : "Share this link to start transfer"}
       </p>
 
       {sessionState !== STATES.COMPLETED && (
-        <>
-          <div className="flex justify-center mb-6">
+        <div className="flex flex-col items-center">
+          <div className="flex justify-center mb-6 p-4 bg-[#121210] rounded-2xl">
             <QRCodeCanvas
               value={roomUrl || code}
               size={140}
-              bgColor="#ffffff"
-              fgColor="#111111"
+              bgColor="#121210"
+              fgColor="#FFE600"
             />
           </div>
 
           <div
             onClick={handleCopy}
-            className="bg-[#f7f7f7] p-3 rounded-lg text-xs mb-4 text-[#6b6b6b] font-mono break-all border border-[rgba(0,0,0,0.06)] cursor-pointer hover:bg-[#f0f0f0] transition-colors duration-200"
+            className="bg-[#121210] text-[#FFE600] p-3 rounded-xl text-xs mb-4 font-mono break-all font-bold cursor-pointer hover:bg-[#222] transition-colors duration-200 uppercase w-full"
             title="Click to copy"
           >
             {roomUrl || code}
@@ -72,22 +74,19 @@ export default function SenderView({
 
           <button
             onClick={handleCopy}
-            className="bg-[#111111] text-white px-6 py-2.5 rounded-full text-sm font-medium hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 w-full mb-4 cursor-pointer"
+            className="bg-[#121210] text-[#FFE600] px-6 py-3 rounded-full text-xl font-bold hover:scale-[1.05] active:scale-[0.98] transition-all duration-200 w-full mb-4 cursor-pointer uppercase tracking-wide border-2 border-transparent"
           >
             Copy Link
           </button>
-        </>
+        </div>
       )}
 
-      <FileQueueUI stagedFiles={stagedFiles} currentFile={currentFile} />
+      <div className="bg-[#121210] p-4 rounded-xl text-left border-2 border-transparent mt-2">
+        <FileQueueUI stagedFiles={stagedFiles} currentFile={currentFile} />
+      </div>
 
       {showFilePicker && (
-        <>
-          <p className="text-sm text-[#6b6b6b] mt-4 mb-3">
-            {sessionState === STATES.COMPLETED
-              ? "Send more files?"
-              : "Select files to send"}
-          </p>
+        <div className="mt-4">
           <input
             type="file"
             multiple
@@ -100,17 +99,17 @@ export default function SenderView({
           />
           <label
             htmlFor="senderFileInput"
-            className="w-full inline-block cursor-pointer bg-[#111111] text-white px-6 py-2.5 rounded-full text-sm font-medium hover:scale-[1.02] active:scale-[0.97] transition-all duration-200 text-center"
+            className="w-full inline-block cursor-pointer bg-transparent border-[3px] border-[#121210] text-[#121210] px-6 py-3 rounded-full text-xl font-bold hover:bg-[#121210] hover:text-[#FFE600] transition-all duration-200 text-center uppercase tracking-wide"
           >
-            Select Files
+            Select More
           </label>
-        </>
+        </div>
       )}
 
-      <p className="text-xs text-[#6b6b6b] mt-6 flex justify-center items-center gap-2 pt-4 border-t border-[rgba(0,0,0,0.06)]">
+      <div className="mt-6 flex justify-center items-center gap-2 pt-4 border-t-4 border-[#121210] text-[#121210] font-bold uppercase text-sm">
         <StatusDot isConnected={isConnected} status={status} />
         {statusMessage}
-      </p>
+      </div>
     </div>
   );
 }

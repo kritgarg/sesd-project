@@ -107,6 +107,7 @@ export default function Home() {
           >
             
             <div className={styles.yellowTop}>
+              <img src="/icon.png" alt="SwiftShare Logo" style={{ width: '80px', height: '80px', borderRadius: '16px', marginBottom: '1rem', border: '4px solid #121210' }} />
               <h1 className={styles.cardText}>
                 SWIFT<br/>SHARE
               </h1>
@@ -186,7 +187,10 @@ export default function Home() {
             <div></div>
             <div></div>
           </div>
-          <div>SWIFTSHARE</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <img src="/icon.png" alt="Logo" style={{ width: '28px', height: '28px', borderRadius: '6px', border: '2px solid #121210' }} />
+            SWIFTSHARE
+          </div>
           <div className={styles.navBars}>
             <div style={{height: '6px'}}></div>
             <div style={{height: '12px'}}></div>
@@ -202,14 +206,17 @@ export default function Home() {
         />
         <div className={`${styles.sidebar} ${isSidebarOpen ? styles.open : ""}`}>
           <button className={styles.closeSidebarBtn} onClick={() => setIsSidebarOpen(false)}>✕</button>
-          <div className={styles.sidebarTitle}>MENU</div>
+          <div className={styles.sidebarTitle}>
+            <img src="/icon.png" alt="Logo" style={{ width: '60px', height: '60px', borderRadius: '12px', border: '4px solid #121210', marginBottom: '1rem', display: 'block' }} />
+            MENU
+          </div>
           <div className={styles.sidebarMenu}>
             <Link href="/how-it-works" className={styles.sidebarLink} onClick={() => setIsSidebarOpen(false)}>How it works</Link>
             <a href="https://github.com/kritgarg" target="_blank" rel="noreferrer" className={styles.sidebarLink}>Developer</a>
           </div>
           <div className={styles.socialLinks}>
             <a href="https://github.com/kritgarg" target="_blank" rel="noreferrer" className={styles.socialIcon}>GitHub</a>
-            <a href="https://linkedin.com/in/kritgarg" target="_blank" rel="noreferrer" className={styles.socialIcon}>LinkedIn</a>
+            <a href="https://linkedin.com/in/krit--garg" target="_blank" rel="noreferrer" className={styles.socialIcon}>LinkedIn</a>
           </div>
         </div>
       </div>

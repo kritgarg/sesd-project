@@ -34,8 +34,8 @@ export default function ReceiverView({
         </p>
         <div className="w-full bg-[#121210] rounded-full h-8 overflow-hidden border-2 border-[#121210] relative">
           <div
-            className="bg-[#FFE600] h-full transition-all duration-200 border-r-4 border-[#121210]"
-            style={{ width: `${Math.min(recvProgress, 100)}%` }}
+            className="h-full transition-all duration-200 border-r-4 border-[#121210]"
+            style={{ width: `${Math.min(recvProgress, 100)}%`, backgroundColor: '#FFE600' }}
           />
         </div>
       </div>

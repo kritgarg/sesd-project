@@ -95,24 +95,20 @@ export function useWebRTC(code, addLog) {
 
     const pc = new RTCPeerConnection({
       iceServers: [
+        // STUN
         { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" },
-        { urls: "stun:stun3.l.google.com:19302" },
-        { urls: "stun:stun4.l.google.com:19302" },
-        { urls: "stun:stun.services.mozilla.com" },
-        {
-          urls: "turn:openrelay.metered.ca:80",
-          username: "openrelayproject",
-          credential: "openrelayproject"
-        },
-        {
-          urls: "turn:openrelay.metered.ca:443",
-          username: "openrelayproject",
-          credential: "openrelayproject"
-        },
+        { urls: "stun:stun.cloudflare.com:3478" },
+
+        // TURN (primary)
         {
           urls: "turn:openrelay.metered.ca:443?transport=tcp",
+          username: "openrelayproject",
+          credential: "openrelayproject"
+        },
+
+        // TURN (backup)
+        {
+          urls: "turn:global.relay.metered.ca:443?transport=tcp",
           username: "openrelayproject",
           credential: "openrelayproject"
         }
@@ -128,6 +124,9 @@ export function useWebRTC(code, addLog) {
 
     pc.onicecandidate = (event) => {
       if (event.candidate && ws.readyState === WebSocket.OPEN) {
+        if (event.candidate.candidate.includes("relay")) {
+          addLog("Using relay connection (slower)");
+        }
         ws.send(
           JSON.stringify({
             type: "ice-candidate",
@@ -145,7 +144,23 @@ export function useWebRTC(code, addLog) {
     pc.onconnectionstatechange = () => {
       addLog(`RTC: ${pc.connectionState}`);
       if (pc.connectionState === "connected") {
-        setStatus("Peer connected");
+        pc.getStats(null).then((stats) => {
+          let usingRelay = false;
+          stats.forEach((report) => {
+            if (report.type === "candidate-pair" && report.state === "succeeded") {
+              const local = stats.get(report.localCandidateId);
+              const remote = stats.get(report.remoteCandidateId);
+              if ((local && local.candidateType === "relay") || (remote && remote.candidateType === "relay")) {
+                usingRelay = true;
+              }
+            }
+          });
+          if (usingRelay) {
+            setStatus("Connected via Relay (Slower)");
+          } else {
+            setStatus("Peer connected (Direct Path)");
+          }
+        });
       } else if (pc.connectionState === "failed") {
         setStatus("Connection failed ❌");
         addLog("WebRTC connection failed — troubleshoot NAT/STUN");
